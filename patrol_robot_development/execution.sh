@@ -2,7 +2,7 @@
 
 # Open a new terminal window
 function open_terminal() {
-    gnome-terminal --window --wait -- bash -c "echo $1 && $SHELL"  &
+    gnome-terminal --window --wait -- bash -c "$1 && $SHELL"  &
     if [ "$1" = "roscore" ]; then
         sleep 3
     else
