@@ -196,7 +196,7 @@ decision_node()
 
 	
 	ROS_INFO("vinicius node\n");
-	// getchar();
+	getchar();
 
 
     //INFINITE LOOP TO COLLECT LASER DATA AND PROCESS THEM
@@ -265,27 +265,20 @@ void update()
 
         if ( current_state == waiting_for_a_person )
             process_waiting_for_a_person();
-        else
-            if ( current_state == observing_the_person )
-                process_observing_the_person();
-            else
-                if ( current_state == rotating_to_the_person )
-                    process_rotating_to_the_person();
-                else
-                    if ( current_state == moving_to_the_person )
-                        process_moving_to_the_person();
-                    else
-                        if ( current_state == interacting_with_the_person )
-                            process_interacting_with_the_person();
-                        else
-                            if ( current_state == rotating_to_the_base )
-                                process_rotating_to_the_base();
-                            else
-                                if ( current_state == returning_to_the_base )
-                                    process_returning_to_the_base();
-                                else
-                                    if ( current_state == resetting_orientation )
-                                        process_resetting_orientation();
+        else if ( current_state == observing_the_person )
+            process_observing_the_person();
+        else if ( current_state == rotating_to_the_person )
+            process_rotating_to_the_person();
+        else if ( current_state == moving_to_the_person )
+            process_moving_to_the_person();
+        else if ( current_state == interacting_with_the_person )
+            process_interacting_with_the_person();
+        else if ( current_state == rotating_to_the_base )
+            process_rotating_to_the_base();
+        else if ( current_state == returning_to_the_base )
+            process_returning_to_the_base();
+        else if ( current_state == resetting_orientation )
+            process_resetting_orientation();
 
         new_person_position = false;
         new_aruco = false;

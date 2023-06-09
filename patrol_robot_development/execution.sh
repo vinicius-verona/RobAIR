@@ -47,15 +47,15 @@ window_height=$((screen_height / 2))
 
 if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
     # Open terminals in the first workspace - Basic commands
-    open_terminal "./switch_config.sh robair"
-    wid=$(get_last_window_id)
-    move_to_workspace $wid 1
-    set_window_position $wid 0 0 $window_width $window_height  "Switch Config"
+    # open_terminal "./switch_config.sh robair"
+    # wid=$(get_last_window_id)
+    # move_to_workspace $wid 1
+    # set_window_position $wid 0 0 $window_width $window_height  "Switch Config"
 
-    open_terminal "roscore"
-    wid=$(get_last_window_id)
-    move_to_workspace $wid 1
-    set_window_position $wid $window_width 0 $window_width $window_height "Roscore"
+    # open_terminal "roscore"
+    # wid=$(get_last_window_id)
+    # move_to_workspace $wid 1
+    # set_window_position $wid $window_width 0 $window_width $window_height "Roscore"
 
     open_terminal "roslaunch robairmain robair_ufr.launch"
     wid=$(get_last_window_id)
@@ -68,17 +68,17 @@ if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
     set_window_position $wid $window_width $window_height $window_width $window_height "Rosrun Webcam"
 
     # Open terminals in the second workspace - Follow-me
-    open_terminal "rosrun patrol_robot_development obstacle_detection_patrol_robot_development_node"
+    open_terminal "rosrun follow_me obstacle_detection_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 2
     set_window_position $wid 0 0 $window_width "$(($window_height * 2))" "Obstacle Detection"
 
-    open_terminal "rosrun patrol_robot_development robot_moving_patrol_robot_development_node"
+    open_terminal "rosrun follow_me robot_moving_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 2
     set_window_position $wid $window_width 0 $window_width "$(($window_height * 2))" "Robot Moving"
 
-    # Open terminals in the third workspace - Welcome-Complete
+    # Open terminals in the third workspace - Patrol-Development
     open_terminal "rosrun patrol_robot_development datmo_patrol_robot_development_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 3
@@ -99,6 +99,6 @@ if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
     move_to_workspace $wid 3
     set_window_position $wid $window_width $window_height $window_width $window_height "Action Welcome"
 else
-    apt-get install wmctrl  -y
-    apt-get install xdotool -y
+    sudo apt-get install wmctrl  -y
+    sudo apt-get install xdotool -y
 fi
