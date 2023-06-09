@@ -525,7 +525,7 @@ void process_moving_to_the_person()
         if ( translation_to_person>0.5 )
         {
             pub_goal_to_reach.publish(person_position);
-            ROS_WARN("person-position-decision-node: %f, %f\n", person_position.x, person_position.y)
+            ROS_WARN("person-position-decision-node: %f, %f\n", person_position.x, person_position.y);
         }
     }
 

@@ -97,7 +97,6 @@ advanced_action_node()
 
     // communication with datmo
     sub_goal_to_reach = n.subscribe("goal_to_reach", 1, &advanced_action_node::goal_to_reachCallback, this);
-    //sub_goal_to_reach = n.subscribe("robair_goal", 1, &advanced_action_node::goal_to_reachCallback, this);
 
     new_goal_to_reach = false;
     init_odom = false;

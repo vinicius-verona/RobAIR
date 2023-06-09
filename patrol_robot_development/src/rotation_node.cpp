@@ -33,8 +33,8 @@ private:
     // communication with cmd_vel to send command to the mobile robot
     ros::Publisher pub_cmd_vel;
 
-    geometry_msgs::Point goal_to_reach;
-    bool new_goal_to_reach;//to check if a new /goal_to_reach is available or not
+    // geometry_msgs::Point goal_to_reach;
+    // bool new_goal_to_reach;//to check if a new /goal_to_reach is available or not
 
     bool cond_goal;// boolean to check if we still have to reach the goal or not
 
@@ -64,7 +64,7 @@ action() {
     sub_odometry = n.subscribe("odom", 1, &action::odomCallback, this);
 
     // communication with datmo
-    sub_goal_to_reach = n.subscribe("goal_to_reach", 1, &action::goal_to_reachCallback, this);
+    // sub_goal_to_reach = n.subscribe("goal_to_reach", 1, &action::goal_to_reachCallback, this);
 
     // communication with datmo
     sub_rotation_to_do = n.subscribe("rotation_to_do", 1, &action::rotation_to_doCallback, this);
@@ -94,8 +94,8 @@ void update() {
     {
 
         // we receive a new /goal_to_reach
-        if ( new_goal_to_reach )
-            init_rotation();
+        // if ( new_goal_to_reach )
+            // init_rotation();
 
         //we are performing a rotation
         if ( cond_rotation )
@@ -224,14 +224,14 @@ void odomCallback(const nav_msgs::Odometry::ConstPtr& o) {
 
 }
 
-void goal_to_reachCallback(const geometry_msgs::Point::ConstPtr& g)
-{
-// process the goal received from moving_persons detector
+// void goal_to_reachCallback(const geometry_msgs::Point::ConstPtr& g)
+// {
+// // process the goal received from moving_persons detector
 
-    new_goal_to_reach = true;
-    goal_to_reach = *g;
+//     new_goal_to_reach = true;
+//     goal_to_reach = *g;
 
-}
+// }
 
 void rotation_to_doCallback(const std_msgs::Float32::ConstPtr& r)
 {
@@ -240,6 +240,8 @@ void rotation_to_doCallback(const std_msgs::Float32::ConstPtr& r)
     cond_rotation = true;
     rotation_to_do = r->data;
     initial_orientation = current_orientation;
+    error_integral_rotation = 0;
+    error_previous_rotation = 0;
 
 }
 
