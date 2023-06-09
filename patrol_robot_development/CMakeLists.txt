@@ -109,7 +109,7 @@ include_directories(
 
 ## Declare a cpp executable
 add_executable(decision_patrol_robot_development_node src/decision_node.cpp)
-add_executable(decision_patrol_robot_vinicius_node src/decision_node_vinicius.cpp)
+add_executable(decision_patrol_robot_development_vinicius_node src/decision_node_vinicius.cpp)
 add_executable(datmo_patrol_robot_development_node src/datmo_node.cpp)
 add_executable(robot_moving_patrol_robot_development_node src/robot_moving_node.cpp)
 add_executable(action_patrol_robot_development_node src/action_node.cpp)
@@ -122,7 +122,7 @@ add_executable(rotation_patrol_robot_development_node src/rotation_node.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(decision_patrol_robot_development_node ${catkin_LIBRARIES})
-target_link_libraries(decision_patrol_robot_vinicius_node ${catkin_LIBRARIES})
+target_link_libraries(decision_patrol_robot_development_vinicius_node ${catkin_LIBRARIES})
 target_link_libraries(datmo_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(robot_moving_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(action_patrol_robot_development_node ${catkin_LIBRARIES})
