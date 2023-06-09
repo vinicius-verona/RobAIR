@@ -196,7 +196,7 @@ decision_node()
 
 	
 	ROS_INFO("vinicius node\n");
-	getchar();
+	// getchar();
 
 
     //INFINITE LOOP TO COLLECT LASER DATA AND PROCESS THEM
@@ -478,7 +478,7 @@ void process_rotating_to_the_person()
         {
             current_state = moving_to_the_person;
             ROS_INFO("Switching to move to person\n");
-            getchar();
+            // getchar();
            
             /*std_msgs::Float32 msg_rotation_to_person;
             msg_rotation_to_person.data = 0;
