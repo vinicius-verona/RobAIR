@@ -1,0 +1,4 @@
+Chnager images:
+note:
+marquer "après avoir pris un flyer, donnez une note en montrant..."
+   "Ensuite, éloingez vous du robot pour terminer l'interaction".
