@@ -353,6 +353,12 @@ void move_robot()
     if ( only_rotation && cond_rotation )
         twist.angular.z = current_rotation_speed;
 
+    if (twist.linear.x == 0) 
+        ROS_WARN("twist.linear.x is 0 in action_node\n");
+
+    if (twist.angular.z == 0) 
+        ROS_WARN("twist.angular.z is 0 in action_node\n");
+
     pub_cmd_vel.publish(twist);
 
 }// move_robot

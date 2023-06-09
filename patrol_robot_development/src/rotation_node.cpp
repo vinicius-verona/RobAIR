@@ -210,6 +210,10 @@ void move_robot()
     twist.angular.y = 0;
     twist.angular.z = current_rotation_speed;
 
+    if (current_rotation_speed == 0) {
+        ROS_WARN("current_rotation_speed is 0 in rotation_node\n");
+    }
+
     pub_cmd_vel.publish(twist);
 
 }// move_robot
