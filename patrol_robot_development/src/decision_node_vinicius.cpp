@@ -21,6 +21,7 @@
 #define returning_to_the_base 6
 #define resetting_orientation 7
 
+#define DEBUG_GETCHAR_ENABLED 1
 
 //hall de de l'UFR
 //#define base_x 25.5
@@ -273,12 +274,12 @@ void update()
             process_moving_to_the_person();
         else if ( current_state == interacting_with_the_person )
             process_interacting_with_the_person();
-        else if ( current_state == rotating_to_the_base )
-            process_rotating_to_the_base();
-        else if ( current_state == returning_to_the_base )
-            process_returning_to_the_base();
-        else if ( current_state == resetting_orientation )
-            process_resetting_orientation();
+        // else if ( current_state == rotating_to_the_base )
+        //     process_rotating_to_the_base();
+        // else if ( current_state == returning_to_the_base )
+        //     process_returning_to_the_base();
+        // else if ( current_state == resetting_orientation )
+        //     process_resetting_orientation();
 
         new_person_position = false;
         new_aruco = false;
@@ -502,6 +503,9 @@ void process_moving_to_the_person()
 {
 
     ROS_INFO("current_state: moving_to_the_person");
+
+    if (DEBUG_GETCHAR_ENABLED) getchar();
+
     if ( state_has_changed )
     {
         frequency = 0;
@@ -551,6 +555,8 @@ void process_moving_to_the_person()
              ROS_INFO("Too far from base\n");
          }
 
+         if (DEBUG_GETCHAR_ENABLED) getchar();
+
          current_state = rotating_to_the_base;
     }
 
@@ -566,6 +572,7 @@ void process_interacting_with_the_person()
         //getchar();
     }
 
+    if (DEBUG_GETCHAR_ENABLED) getchar();
     pub_goal_to_reach.publish(origin_position);
 
     //1st condition to leave the state
