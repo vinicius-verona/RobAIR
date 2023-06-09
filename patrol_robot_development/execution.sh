@@ -68,33 +68,33 @@ if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
     set_window_position $wid $window_width $window_height $window_width $window_height "Rosrun Webcam"
 
     # Open terminals in the second workspace - Follow-me
-    open_terminal "rosrun follow_me obstacle_detection_node"
+    open_terminal "rosrun patrol_robot_development obstacle_detection_patrol_robot_development_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 2
     set_window_position $wid 0 0 $window_width "$(($window_height * 2))" "Obstacle Detection"
 
-    open_terminal "rosrun follow_me robot_moving_node"
+    open_terminal "rosrun patrol_robot_development robot_moving_patrol_robot_development_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 2
     set_window_position $wid $window_width 0 $window_width "$(($window_height * 2))" "Robot Moving"
 
     # Open terminals in the third workspace - Welcome-Complete
-    open_terminal "rosrun welcome_robot_complete datmo_welcome_complete_node"
+    open_terminal "rosrun patrol_robot_development datmo_patrol_robot_development_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 3
     set_window_position $wid 0 0 $window_width $window_height "Datmo Welcome"
 
-    open_terminal "rosrun welcome_robot_complete decision_welcome_complete_vinicius_node"
+    open_terminal "rosrun patrol_robot_development decision_patrol_robot_development_vinicius_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 3
     set_window_position $wid $window_width 0 $window_width $window_height "Decision Welcome"
 
-    open_terminal "rosrun welcome_robot_complete rotation_welcome_complete_node"
+    open_terminal "rosrun patrol_robot_development rotation_patrol_robot_development_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 3
     set_window_position $wid 0 $window_height $window_width $window_height "Rotation Welcome"
 
-    open_terminal "rosrun welcome_robot_complete action_welcome_complete_node"
+    open_terminal "rosrun patrol_robot_development action_patrol_robot_development_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 3
     set_window_position $wid $window_width $window_height $window_width $window_height "Action Welcome"
