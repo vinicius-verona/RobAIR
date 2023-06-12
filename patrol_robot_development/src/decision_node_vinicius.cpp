@@ -54,10 +54,24 @@
 
 #define frequency_expected 25
 #define MAX_BASE_DIST 5.0
+#define min_angle 0.1  // 0.1 rad = 5 degrees
 
 #define ARUCO_MODE 1 //if 0, use only odometry
 
 #define AUDIO_COOLDOWN 30 //number of node cycles to wait before saying the same thing again
+
+
+float clamp(float orientation)
+{
+    while (orientation > M_PI)
+        orientation -= 2 * M_PI;
+
+
+    while (orientation < -M_PI)
+        orientation += 2 * M_PI;
+        
+    return orientation;
+}
 
 class decision_node
 {
@@ -274,12 +288,12 @@ void update()
             process_moving_to_the_person();
         else if ( current_state == interacting_with_the_person )
             process_interacting_with_the_person();
-        // else if ( current_state == rotating_to_the_base )
-        //     process_rotating_to_the_base();
-        // else if ( current_state == returning_to_the_base )
-        //     process_returning_to_the_base();
-        // else if ( current_state == resetting_orientation )
-        //     process_resetting_orientation();
+        else if ( current_state == rotating_to_the_base )
+            process_rotating_to_the_base();
+        else if ( current_state == returning_to_the_base )
+            process_returning_to_the_base();
+        else if ( current_state == resetting_orientation )
+            process_resetting_orientation();
 
         new_person_position = false;
         new_aruco = false;
@@ -714,6 +728,23 @@ void process_resetting_orientation()
         ROS_INFO("current_state: resetting_orientation");
         frequency = 0;
         std_msgs::Float32 rot;
+        // #if ARUCO_MODE
+        //     if (previous_state == returning_to_the_base) {
+        //         //assume robair will be facing the base upon arriving, so make it rotate 180°
+        //         rot.data = M_PI;
+        //         pub_rotation_to_do.publish(rot);
+        //     }
+        //     else {
+        //         rot.data = base_orientation-current_orientation;
+        //         pub_rotation_to_do.publish(rot);
+        //     }
+        // #else
+        //     rot.data = base_orientation-current_orientation;
+        //     pub_rotation_to_do.publish(rot);
+        // #endif
+
+        float rot_difference = clamp(base_orientation-current_orientation);
+
         #if ARUCO_MODE
             if (previous_state == returning_to_the_base) {
                 //assume robair will be facing the base upon arriving, so make it rotate 180°
@@ -721,12 +752,15 @@ void process_resetting_orientation()
                 pub_rotation_to_do.publish(rot);
             }
             else {
-                rot.data = base_orientation-current_orientation;
+                
+                rot.data = -rot_difference;
                 pub_rotation_to_do.publish(rot);
             }
         #else
-            rot.data = base_orientation-current_orientation;
-            pub_rotation_to_do.publish(rot);
+            if (!fabs(rot_difference) <= min_angle){
+                rot.data = -rot_difference;
+                pub_rotation_to_do.publish(rot);
+            }
         #endif
     }
 
