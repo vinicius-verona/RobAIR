@@ -21,7 +21,7 @@
 #define returning_to_the_base 6
 #define resetting_orientation 7
 
-#define DEBUG_GETCHAR_ENABLED 1
+#define DEBUG_GETCHAR_ENABLED 0
 
 //hall de de l'UFR
 //#define base_x 25.5
@@ -210,8 +210,8 @@ decision_node()
     aruco_position.x = 0.0; aruco_position.y = 0.0;
 
 	
-	ROS_INFO("vinicius node - press enter\n");
-	getchar();
+	// ROS_INFO("vinicius node - press enter\n");
+	// getchar();
 
 
     //INFINITE LOOP TO COLLECT LASER DATA AND PROCESS THEM
@@ -518,7 +518,7 @@ void process_moving_to_the_person()
 
     ROS_INFO("current_state: moving_to_the_person");
 
-    if (DEBUG_GETCHAR_ENABLED) getchar();
+    // if (DEBUG_GETCHAR_ENABLED) getchar();
 
     if ( state_has_changed )
     {
@@ -569,7 +569,7 @@ void process_moving_to_the_person()
              ROS_INFO("Too far from base\n");
          }
 
-         if (DEBUG_GETCHAR_ENABLED) getchar();
+        //  if (DEBUG_GETCHAR_ENABLED) getchar();
 
          current_state = rotating_to_the_base;
     }
@@ -586,7 +586,7 @@ void process_interacting_with_the_person()
         //getchar();
     }
 
-    if (DEBUG_GETCHAR_ENABLED) getchar();
+    // if (DEBUG_GETCHAR_ENABLED) getchar();
     pub_goal_to_reach.publish(origin_position);
 
     //1st condition to leave the state
