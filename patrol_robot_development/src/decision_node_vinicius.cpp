@@ -20,7 +20,7 @@
 // #define rotate_to_base 4
 // #define return_to_base 5
 
-#define safe_distance_from_aruco 1
+#define safe_distance_from_aruco 0.5 // in meters
 
 
 #define DEBUG_GETCHAR_ENABLED 0
@@ -279,7 +279,7 @@ void process_moving_to_aruco_marker()
     }
 
     int old_frequency = frequency;
-    if ( !robot_moving && aruco_position.x <= safe_distance_from_aruco )
+    if ( !robot_moving && distancePoints(current_position, aruco_position) <= safe_distance_from_aruco )
     {
         frequency++;
         if ( frequency >= frequency_expected - 15)
