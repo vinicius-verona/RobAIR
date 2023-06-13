@@ -183,7 +183,7 @@ void update_variables()
 void process_searching_aruco_marker() 
 {
 
-    ROS_INFO("current_state: searchingn_aruco_marker");
+    ROS_INFO("current_state: searching_aruco_marker");
     std_msgs::Float32 msg_rotation_to_do;
     
     // Initialize rotation to do based on odometry
@@ -252,7 +252,7 @@ void process_searching_aruco_marker()
 void process_moving_to_aruco_marker()
 {
 
-    ROS_INFO("current_state: returning_to_the_base");
+    ROS_INFO("current_state: moving_to_aruco_marker");
 
     if ( state_has_changed )
     {
@@ -277,6 +277,8 @@ void process_moving_to_aruco_marker()
         msg_goal_to_reach.z = (float) current_state;
         pub_goal_to_reach.publish(msg_goal_to_reach);
     }
+
+    ROS_WARN("Distance between ARUCO and robot: %f\n", distancePoints(current_position, aruco_position))
 
     int old_frequency = frequency;
     if ( !robot_moving && distancePoints(current_position, aruco_position) <= safe_distance_from_aruco )
