@@ -113,16 +113,11 @@ decision_node()
 
     // communication with obstacle_detection
     sub_obstacle_detection = n.subscribe("closest_obstacle", 1, &decision_node::closest_obstacleCallback, this);
-
-    pub_play_sound_file = n.advertise<std_msgs::String>("play_sound_file", 1);
-    pub_display_image_file = n.advertise<std_msgs::String>("display_image_file", 1);
-
     pub_change_odom = n.advertise<geometry_msgs::Point>("change_odometry", 1);
 
     current_state = searching_aruco_marker;
     previous_state = -1;
 
-    new_person_position = false;
     new_aruco = false;
     state_has_changed = false;
     init_odom = false;
