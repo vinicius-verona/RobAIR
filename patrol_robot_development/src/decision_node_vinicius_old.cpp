@@ -12,36 +12,52 @@
 #include <iostream>
 
 
-// Processes for the welcome robot version
-// #define waiting_for_a_person 0
-// #define observing_the_person 1
-// #define rotating_to_the_person 2
-// #define moving_to_the_person 3
-// #define interacting_with_the_person 4
-// #define rotating_to_the_base 5
-// #define returning_to_the_base 6
-// #define resetting_orientation 7
-
-#define searching_aruco_marker 0
-#define rotating_to_aruco_marker 1
-#define moving_to_aruco_marker 2
-
-#define safe_distance_from_aruco 1
-
-// Future process
-// #define avoiding_obstacle 3
+#define waiting_for_a_person 0
+#define observing_the_person 1
+#define rotating_to_the_person 2
+#define moving_to_the_person 3
+#define interacting_with_the_person 4
+#define rotating_to_the_base 5
+#define returning_to_the_base 6
+#define resetting_orientation 7
 
 #define DEBUG_GETCHAR_ENABLED 0
+
+//hall de de l'UFR
+//#define base_x 25.5
+//#define base_y -17
+//#define base_orientation 12
+
+//F218
+/*#define base_position_x 6.5
+#define base_position_y 4.3
+#define base_orientation M_PI*/
+
+//Maison
+//#define base_position_x 0.25 //grande carte
+/*#define base_position_x -.3
+#define base_position_y -.2
+#define base_orientation 0*/
+
+//#define base_position_x 0
+//#define base_position_y 0
+
+//couloir
+//#define base_x 7.4
+//#define base_y -3.5
 
 //Philip Plateau Test
 #define base_position_x 0
 #define base_position_y 0
+
+
 
 #define frequency_expected 25
 #define MAX_BASE_DIST 5.0
 #define min_angle 0.1  // 0.1 rad = 5 degrees
 
 #define ARUCO_MODE 1 //if 0, use only odometry
+
 #define AUDIO_COOLDOWN 30 //number of node cycles to wait before saying the same thing again
 
 
@@ -218,51 +234,68 @@ void update()
     //init_localization = true;
     if ( init_odom && init_obstacle )
     {
+        //state_has_changed = true;
+        //reset_frequency();
 
         update_variables();
 
         //Pass state information in the goal .z component for social nav planner to know if we're going towards a person.
         person_position.z = (float)current_state;
 
-        // ROS_INFO ("\n translation_to_base is %.3f m\n", translation_to_base);
+        /*
+        switch ( current_state )
+        {
+            case waiting_for_a_person:
+                process_waiting_for_a_person();
 
+            case rotating_to_the_person:
+                process_rotating_to_the_person();
+
+            case moving_to_the_person:
+                process_moving_to_the_person();
+
+            case interacting_with_the_person:
+                process_interacting_with_the_person();
+
+            case returning_to_the_base:
+                process_returning_to_the_base();
+
+            case resetting_orientation:
+            process_resetting_orientation();
+        }
+        */
+
+        ROS_INFO ("\n translation_to_base is %.3f m\n", translation_to_base);
         // Make sure the robot does not go too far from the base
-        // if ( distancePoints(base_position, current_position) > m_max_base_distance &&
-        //      current_state != rotating_to_the_base &&
-        //      current_state != returning_to_the_base) {
-        //     //TODO: something like implement a new state called "stop_robot", which publishes 0,0 GTR, and waits for robot to stop moving, then transitions to RTB
-        //     pub_goal_to_reach.publish(origin_position);
-        //     sleep(3);
-        //     current_state = rotating_to_the_base;
-        // }
+
+        if ( distancePoints(base_position, current_position) > m_max_base_distance &&
+             current_state != rotating_to_the_base &&
+             current_state != returning_to_the_base) {
+            //TODO: something like implement a new state called "stop_robot", which publishes 0,0 GTR, and waits for robot to stop moving, then transitions to RTB
+            pub_goal_to_reach.publish(origin_position);
+            sleep(3);
+            current_state = rotating_to_the_base;
+        }
 
 
-        if ( current_state == searching_aruco_marker ) 
-            process_searching_aruco_marker();
-        else if ( current_state == rotating_to_aruco_marker )
-            process_rotating_to_aruco_marker();
-        else
-            process_moving_to_aruco_marker();
+        if ( current_state == waiting_for_a_person )
+            process_waiting_for_a_person();
+        else if ( current_state == observing_the_person )
+            process_observing_the_person();
+        else if ( current_state == rotating_to_the_person )
+            process_rotating_to_the_person();
+        else if ( current_state == moving_to_the_person )
+            process_moving_to_the_person();
+        else if ( current_state == interacting_with_the_person )
+            process_interacting_with_the_person();
+        else if ( current_state == rotating_to_the_base )
+            process_rotating_to_the_base();
+        else if ( current_state == returning_to_the_base )
+            process_returning_to_the_base();
+        else if ( current_state == resetting_orientation )
+            process_resetting_orientation();
 
-        // Process for welcome robot
-        // if ( current_state == waiting_for_a_person )
-        //     process_waiting_for_a_person();
-        // else if ( current_state == observing_the_person )
-        //     process_observing_the_person();
-        // else if ( current_state == rotating_to_the_person )
-        //     process_rotating_to_the_person();
-        // else if ( current_state == moving_to_the_person )
-        //     process_moving_to_the_person();
-        // else if ( current_state == interacting_with_the_person )
-        //     process_interacting_with_the_person();
-        // else if ( current_state == rotating_to_the_base )
-        //     process_rotating_to_the_base();
-        // else if ( current_state == returning_to_the_base )
-        //     process_returning_to_the_base();
-        // else if ( current_state == resetting_orientation )
-        //     process_resetting_orientation();
-
-        // new_person_position = false;
+        new_person_position = false;
         new_aruco = false;
 
         state_has_changed = current_state != previous_state;
@@ -287,187 +320,64 @@ void update()
 
 }// update
 
+
 void update_variables()
 {
 
-    // if ( new_person_position )
-    // {
-    //     translation_to_person = distancePoints(origin_position, person_position);
+    if ( new_person_position )
+    {
+        translation_to_person = distancePoints(origin_position, person_position);
 
-    //     if ( translation_to_person > 0 )
-    //     {
-    //         rotation_to_person = acos( person_position.x / translation_to_person );
-    //         if ( person_position.y < 0 )
-    //             rotation_to_person *=-1;
-    //     }
-    //     else
-    //         rotation_to_person = 0;
-    //     person_tracked = person_position.x != 0 || person_position.y != 0;
-    // }        
+        if ( translation_to_person > 0 )
+        {
+            rotation_to_person = acos( person_position.x / translation_to_person );
+            if ( person_position.y < 0 )
+                rotation_to_person *=-1;
+        }
+        else
+            rotation_to_person = 0;
+        person_tracked = person_position.x != 0 || person_position.y != 0;
+    }        
 
     // in the frame of odom
     // we have a rotation and a translation to perform
     // we compute the /translation_to_do
-    // geometry_msgs::Point local_base_position; // Not really the real base position in RobAIR cartesian coordinates, just an intermediate step to compute rotation.
-    // local_base_position.x = base_position.x - current_position.x;
-    // local_base_position.y = base_position.y - current_position.y;
+    geometry_msgs::Point local_base_position; // Not really the real base position in RobAIR cartesian coordinates, just an intermediate step to compute rotation.
+    local_base_position.x = base_position.x - current_position.x;
+    local_base_position.y = base_position.y - current_position.y;
 
     // we have a rotation and a translation to perform
     // we compute the /translation_to_do
-    // translation_to_base = distancePoints(origin_position, local_base_position);
+    translation_to_base = distancePoints(origin_position, local_base_position);
 
-    // if ( translation_to_base > 0 )
-    // {
-
-    //     //we compute the /rotation_to_do
-    //     rotation_to_base = acos( local_base_position.x / translation_to_base );
-
-    //     if ( local_base_position.y < 0 )
-    //         rotation_to_base *=-1;
-
-    //    // ROS_INFO("rotation_to_base: %f", rotation_to_base*180/M_PI);
-    //     rotation_to_base -= current_orientation;
-    //     //ROS_INFO("rotation_to_base: %f", rotation_to_base*180/M_PI);
-
-    //     if ( rotation_to_base > M_PI )
-    //     {
-    //        // ROS_WARN("rotation_to_base > 180 degrees: %f degrees -> %f degrees", rotation_to_base*180/M_PI, (rotation_to_base-2*M_PI)*180/M_PI);
-    //         rotation_to_base -= 2*M_PI;
-    //     }
-    //     else
-    //         if ( rotation_to_base < -M_PI )
-    //         {
-    //          //   ROS_WARN("rotation_to_base < -180 degrees: %f degrees -> %f degrees", rotation_to_base*180/M_PI, (rotation_to_base+2*M_PI)*180/M_PI);
-    //             rotation_to_base += 2*M_PI;
-    //         }
-    // }
-
-    // So far, in patrolling, there is no base. Therefore rotation_to_base is always 0.0
-    rotation_to_base = 0.0;
-
-
-}
-
-// Patrol robot - processes
-void process_searching_aruco_marker() 
-{
-
-    ROS_INFO("current_state: searchingn_aruco_marker");
-    std_msgs::Float32 msg_rotation_to_do;
-    
-    // Initialize rotation to do based on odometry
-    if ( state_has_changed )
+    if ( translation_to_base > 0 )
     {
-        frequency = 0;
-        msg_rotation_to_do.data = rotation_to_base;
-        pub_rotation_to_do.publish(msg_rotation_to_do);
-        no_aruco = true;
-        if (rotation_to_base > 0.0) {
-            rot_sign_aruco_search = 1.0;
-        }
-        else {
-            rot_sign_aruco_search = -1.0;
-        }
-    }
 
-    int old_frequency = frequency;
-    bool cond = !robot_moving;
+        //we compute the /rotation_to_do
+        rotation_to_base = acos( local_base_position.x / translation_to_base );
 
-    if ( cond )
-    {
-        frequency++;
-        if ( frequency >= (frequency_expected - 15))
+        if ( local_base_position.y < 0 )
+            rotation_to_base *=-1;
+
+       // ROS_INFO("rotation_to_base: %f", rotation_to_base*180/M_PI);
+        rotation_to_base -= current_orientation;
+        //ROS_INFO("rotation_to_base: %f", rotation_to_base*180/M_PI);
+
+        if ( rotation_to_base > M_PI )
         {
-            if (no_aruco) {
-                // Didn't see any aruco since last rotation, rotate again
-                // Reminder: this rotation must have a random factor in order to look fr the aruco. 
-                // Makes no sense to always check the same places
-                std_msgs::Float32 rot;
-                rot.data = (M_PI/2.0 + (rand() % 6) / 6.0) * rot_sign_aruco_search;
-                pub_rotation_to_do.publish(rot);
-                no_aruco = true;
-                frequency = 0;
+           // ROS_WARN("rotation_to_base > 180 degrees: %f degrees -> %f degrees", rotation_to_base*180/M_PI, (rotation_to_base-2*M_PI)*180/M_PI);
+            rotation_to_base -= 2*M_PI;
+        }
+        else
+            if ( rotation_to_base < -M_PI )
+            {
+             //   ROS_WARN("rotation_to_base < -180 degrees: %f degrees -> %f degrees", rotation_to_base*180/M_PI, (rotation_to_base+2*M_PI)*180/M_PI);
+                rotation_to_base += 2*M_PI;
             }
-            else {
-                // When we see an aruco, we go towards it
-                current_state = moving_to_aruco_marker;
-            }
-        }
     }
-    else {
-        frequency = 0;
-    }
-
-    if (new_aruco) {
-        // We see the marker, use that as the orientation.
-        no_aruco = false;
-        float aruco_dist = distancePoints(origin_position, aruco_position);
-        float aruco_rot = 0.0;
-        if ( aruco_dist > 0 )
-        {
-            aruco_rot = acos( aruco_position.x / aruco_dist );
-            if ( aruco_position.y < 0 )
-                aruco_rot *=-1;
-        }
-        msg_rotation_to_do.data = aruco_rot;
-        ROS_WARN("Aruco visible, correcting rotation\n");
-        pub_rotation_to_do.publish(msg_rotation_to_do);
-    }
-
-    if ( old_frequency != frequency )
-        ROS_INFO("frequency_rotation: %i\n", frequency);
 
 }
 
-void process_moving_to_aruco_marker()
-{
-
-    ROS_INFO("current_state: returning_to_the_base");
-
-    if ( state_has_changed )
-    {
-        // Send the goal to reach
-        geometry_msgs::Point msg_goal_to_reach;
-        frequency = 0;
-        no_aruco  = true;
-        msg_goal_to_reach   = aruco_position;
-        msg_goal_to_reach.z = (float) current_state;
-        pub_goal_to_reach.publish(msg_goal_to_reach);
-
-    }
-
-    if ( new_aruco )
-    {
-        no_aruco = false;
-        ROS_INFO("aruco_position: (%f, %f)", aruco_position.x, aruco_position.y);
-
-        // Send the goal to reach
-        geometry_msgs::Point msg_goal_to_reach;
-        msg_goal_to_reach   = aruco_position;
-        msg_goal_to_reach.z = (float) current_state;
-        pub_goal_to_reach.publish(msg_goal_to_reach);
-    }
-
-    int old_frequency = frequency;
-    if ( !robot_moving && aruco_position.x <= safe_distance_from_aruco )
-    {
-        frequency++;
-        if ( frequency >= frequency_expected - 15)
-        {
-            current_state = searching_aruco_marker;
-        }
-    }
-    else
-        frequency = 0;
-
-
-    if ( old_frequency != frequency )
-        ROS_INFO("frequency_base: %i\n", frequency);
-
-}
-
-
-// Welcome robot - processes
 void process_waiting_for_a_person()
 {
 
@@ -762,6 +672,7 @@ void process_rotating_to_the_base()
     if ( old_frequency != frequency )
         ROS_INFO("frequency_rotation: %i\n", frequency);
 }
+
 
 void process_returning_to_the_base()
 {
