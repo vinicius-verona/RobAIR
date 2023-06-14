@@ -1,4 +1,4 @@
-geometry_msgs/Point lt_wall_point
-geometry_msgs/Point rt_wall_point
-float32 left_wall
-float32 right_wall
+geometry_msgs/Point lt_obstacle_point
+geometry_msgs/Point rt_obstacle_point
+float32 left_obstacle_distance
+float32 right_obstacle_distance
