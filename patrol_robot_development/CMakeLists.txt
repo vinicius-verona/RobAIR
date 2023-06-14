@@ -115,6 +115,8 @@ add_executable(robot_moving_patrol_robot_development_node src/robot_moving_node.
 add_executable(action_patrol_robot_development_node src/action_node.cpp)
 add_executable(obstacle_detection_patrol_robot_development_node src/obstacle_detection_node.cpp)
 add_executable(rotation_patrol_robot_development_node src/rotation_node.cpp)
+add_executable(localization_patrol_robot_development_node src/localization_node.cpp)
+add_executable(obstacle_avoidance_patrol_robot_development_node src/obstacle_avoidance_node.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -128,6 +130,8 @@ target_link_libraries(robot_moving_patrol_robot_development_node ${catkin_LIBRAR
 target_link_libraries(action_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(obstacle_detection_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(rotation_patrol_robot_development_node ${catkin_LIBRARIES})
+target_link_libraries(localization_patrol_robot_development_node ${catkin_LIBRARIES})
+target_link_libraries(obstacle_avoidance_patrol_robot_development_node ${catkin_LIBRARIES})
 
 #############
 ## Install ##

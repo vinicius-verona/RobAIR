@@ -1,0 +1,4 @@
+geometry_msgs/Point lt_wall_point
+geometry_msgs/Point rt_wall_point
+float32 left_wall
+float32 right_wall
