@@ -122,6 +122,7 @@ add_executable(obstacle_avoidance_patrol_robot_development_node src/obstacle_avo
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(datmo_node datmo_generate_messages_cpp)
+add_dependencies(obstacle_avoidance_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(decision_patrol_robot_development_node ${catkin_LIBRARIES})

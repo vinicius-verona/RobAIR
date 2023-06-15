@@ -1,4 +1,5 @@
 // Signal handling
+#include <patrol_robot_development/ObstacleAvoidanceMsg.h>
 #include <signal.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
@@ -8,7 +9,6 @@
 #include "geometry_msgs/Point.h"
 #include "message_filters/subscriber.h"
 #include "nav_msgs/Odometry.h"
-#include "patrol_robot_development/msg/ObstacleAvoidanceMsg.h"
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
 #include "std_msgs/ColorRGBA.h"
@@ -22,7 +22,20 @@
 
 float robair_size = 0.25;  // 0.2 for small robair
 
+#define left_angle_start (80 * M_PI / 180)
+#define right_angle_start (-80 * M_PI / 180)
+
 using namespace std;
+
+float clamp(float orientation) {
+    while (orientation > M_PI)
+        orientation -= 2 * M_PI;
+
+    while (orientation < -M_PI)
+        orientation += 2 * M_PI;
+
+    return orientation;
+}
 
 class obstacle_avoidance {
 private:
@@ -107,17 +120,19 @@ public:
             for (int loop2 = 0; loop2 < 2; loop2++)
                 for (int loop = 0; loop < nb_beams;
                      loop++, beam_angle += angle_inc) {
-                    // Check the closest obstacle in the left
-                    if ((current_scan[loop][loop2].y > robair_size) &&
+                    // Check the closest obstacle in the left (+80 degs)
+                    if (clamp(beam_angle) >= left_angle_start &&
+                        (current_scan[loop][loop2].y > robair_size) &&
                         (fabs(lt_closest_obstacle.y) >
                          fabs(current_scan[loop][loop2].y))) {
                         lt_closest_obstacle  = current_scan[loop][loop2];
                         lt_obstacle_detected = true;
                     }
 
-                    // Check the closest obstacle in the right
-                    if ((current_scan[loop][loop2].y < -robair_size) &&
-                        (fabs(closest_obstacle.y) >
+                    // Check the closest obstacle in the right (-80 degs)
+                    if (clamp(beam_angle) <= right_angle_start &&
+                        (current_scan[loop][loop2].y < -robair_size) &&
+                        (fabs(rt_closest_obstacle.y) >
                          fabs(current_scan[loop][loop2].y))) {
                         rt_closest_obstacle  = current_scan[loop][loop2];
                         rt_obstacle_detected = true;
@@ -133,14 +148,6 @@ public:
                     distancePoints(frame_origin, rt_closest_obstacle);
                 pub_closest_obstacles.publish(obstacle_avoidance_msg);
             }
-            // if (distancePoints(closest_obstacle, previous_closest_obstacle) >
-            //     0.05) {
-            //     ROS_INFO("closest obstacle: (%f; %f)", closest_obstacle.x,
-            //              closest_obstacle.y);
-
-            //     previous_closest_obstacle.x = closest_obstacle.x;
-            //     previous_closest_obstacle.y = closest_obstacle.y;
-            // }
         }
     }
 
