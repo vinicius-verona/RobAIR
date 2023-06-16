@@ -1,4 +1,5 @@
 #include <geometry_msgs/Twist.h>
+#include <patrol_robot_development/ObstacleAvoidanceMsg.h>
 #include <tf/transform_datatypes.h>
 
 #include <cmath>
@@ -16,6 +17,7 @@
 // Patrol robot processes
 #define searching_aruco_marker 0
 #define moving_to_aruco_marker 1
+#define avoiding_lateral_crash 2
 
 // Future process
 // #define avoiding_obstacle 3
@@ -23,6 +25,7 @@
 // #define return_to_base 5
 
 #define safe_distance_from_aruco 1
+#define lateral_safety_threshold 0.75
 
 #define DEBUG_GETCHAR_ENABLED 0
 
@@ -56,10 +59,16 @@ private:
     ros::Subscriber sub_robot_moving;
     bool robot_moving;
 
-    // communication with obstacle_detection
+    // communication with obstacle_detection and obstacle_avoidance
     ros::Subscriber sub_obstacle_detection;
+    ros::Subscriber sub_obstacle_avoidance;
     geometry_msgs::Point closest_obstacle;
+    geometry_msgs::Point lt_closest_obstacle;
+    geometry_msgs::Point rt_closest_obstacle;
+    float lt_obstacle_distance;
+    float rt_obstacle_distance;
     bool init_obstacle;
+    bool init_lateral_obstacles;
 
     // communication with odom
     ros::Subscriber sub_odometry;
@@ -116,16 +125,22 @@ public:
         sub_obstacle_detection =
             n.subscribe("closest_obstacle", 1,
                         &decision_node::closest_obstacleCallback, this);
+
+        // communication with obstacle_avoidance
+        sub_obstacle_avoidance =
+            n.subscribe("lateral_distances", 1,
+                        &decision_node::lateral_distancesCallback, this);
         pub_change_odom =
             n.advertise<geometry_msgs::Point>("change_odometry", 1);
 
         current_state  = searching_aruco_marker;
         previous_state = -1;
 
-        new_aruco         = false;
-        state_has_changed = false;
-        init_odom         = false;
-        init_obstacle     = false;
+        new_aruco              = false;
+        state_has_changed      = false;
+        init_odom              = false;
+        init_obstacle          = false;
+        init_lateral_obstacles = false;
 
         origin_position.x = 0;
         origin_position.y = 0;
@@ -158,8 +173,10 @@ public:
 
             if (current_state == searching_aruco_marker)
                 process_searching_aruco_marker();
-            else
+            else if (current_state == moving_to_aruco_marker)
                 process_moving_to_aruco_marker();
+            else
+                process_avoid_lateral_crash();
 
             new_aruco = false;
 
@@ -175,7 +192,17 @@ public:
         // So far, in patrolling, there is no base (future work). Therefore
         // rotation_to_base is always 0.0
         rotation_to_base = 0.0;
-    }
+
+        // if the robot is too close to an obstacle on its side, calculate the
+        // middle between both  measures from /lateral_distances and publish a
+        // new goal_to_reach
+        if ((lt_obstacle_distance <= lateral_safety_threshold) ||
+            (rt_obstacle_distance <= lateral_safety_threshold)) {
+            ROS_WARN("Distance from the sides are below safety threshold, "
+                     "changing state.");
+            current_state = avoiding_lateral_crash;
+        }
+    }  // update_variables
 
     // Patrol robot - processes
     void process_searching_aruco_marker() {
@@ -239,7 +266,7 @@ public:
 
         if (old_frequency != frequency)
             ROS_INFO("frequency_rotation: %i\n", frequency);
-    }
+    }  // process_searching_aruco_marker
 
     void process_moving_to_aruco_marker() {
         ROS_INFO("current_state: moving_to_aruco_marker");
@@ -277,36 +304,64 @@ public:
 
         if (old_frequency != frequency)
             ROS_INFO("frequency_base: %i\n", frequency);
-    }
+    }  // process_moving_to_aruco_marker
+
+    void process_avoid_lateral_crash() {
+        ROS_INFO("current_state: process_avoid_lateral_crash");
+
+        geometry_msgs::Point middle_point;
+        float lt_x = lt_closest_obstacle.x, rt_x = rt_closest_obstacle.x,
+              lt_y = lt_closest_obstacle.y, rt_y = rt_closest_obstacle.y;
+
+        // Simple case: where we have both measures
+        if (!(lt_x == 0 && lt_y == 0) && !(rt_x == 0 && rt_y == 0)) {
+            middle_point.x = (lt_x + rt_x) / 2;
+            middle_point.z = (lt_y + rt_y) / 2;
+        }
+
+        // We do not have the left measures
+        if ((lt_x == 0 && lt_y == 0) && !(rt_x == 0 && rt_y == 0)) {
+        }
+
+        // We do not have the right measures
+        if (!(lt_x == 0 && lt_y == 0) && (rt_x == 0 && rt_y == 0)) {
+        }
+
+    }  // process_avoid_lateral_crash
 
     // CALLBACKS
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
     void odomCallback(const nav_msgs::Odometry::ConstPtr& o) {
-        init_odom = true;
-
+        init_odom           = true;
         current_position    = o->pose.pose.position;
         current_orientation = tf::getYaw(o->pose.pose.orientation);
-    }
+    }  // odomCallback
 
     void robot_movingCallback(const std_msgs::Bool::ConstPtr& state) {
         robot_moving = state->data;
-
     }  // robot_movingCallback
 
     void aruco_positionCallback(const geometry_msgs::Point aruco_msg) {
         new_aruco        = (aruco_msg.x > 0.1) && fabs(aruco_msg.y) > 0.01;
         aruco_position.x = aruco_msg.x;
         aruco_position.y = aruco_msg.y;
-
     }  // aruco_callback
 
     void closest_obstacleCallback(const geometry_msgs::Point::ConstPtr& obs) {
         init_obstacle    = true;
         closest_obstacle = *obs;
-
     }  // closest_obstacleCallback
+
+    void lateral_distancesCallback(
+        const patrol_robot_development::ObstacleAvoidanceMsg::ConstPtr& obs) {
+        init_lateral_obstacles = true;
+        lt_closest_obstacle    = obs->lt_obstacle_point;
+        rt_closest_obstacle    = obs->rt_obstacle_point;
+        lt_obstacle_distance   = obs->lt_obstacle_distance;
+        rt_obstacle_distance   = obs->rt_obstacle_distance;
+    }  // lateral_distancesCallback
 
     // Distance between two points
     float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {

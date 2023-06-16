@@ -72,8 +72,8 @@ private:
     bool cond_translation;  // boolean to check if we still have to translate or
                             // not
     geometry_msgs::Point
-        initial_position;  // to store the initial position ie, before starting
-                           // the pid for translation control
+        initial_position;   // to store the initial position ie, before starting
+                            // the pid for translation control
     geometry_msgs::Point
         current_position;  // to store the current position: this information is
                            // provided by the odometer
@@ -334,8 +334,7 @@ public:
         float coef_rotation = fabs(error_rotation);
         if (coef_rotation > rotation_speed_max)
             coef_rotation = rotation_speed_max;
-        //    if ( coef_rotation < rotation_acceleration )
-        //        coef_rotation = 0;
+
         coef_rotation /= rotation_speed_max;
         float coef_translation = 1 - coef_rotation;
 
