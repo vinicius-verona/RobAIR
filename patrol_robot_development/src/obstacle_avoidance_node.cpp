@@ -20,10 +20,11 @@
 #include "tf/transform_listener.h"
 #include "visualization_msgs/Marker.h"
 
-float robair_size = 0.25;  // 0.2 for small robair
+float robair_size = 0.75;  // 0.35 for small robair
 
-#define left_angle_start (80 * M_PI / 180)
-#define right_angle_start (-80 * M_PI / 180)
+#define x_axis_limit 1.5   // meters
+#define left_angle_start (90 * M_PI / 180)
+#define right_angle_start (-90 * M_PI / 180)
 
 using namespace std;
 
@@ -47,7 +48,7 @@ private:
 
     // communication with action
     ros::Publisher pub_closest_obstacles;
-    // ros::Publisher pub_closest_obstacle_marker;
+    ros::Publisher pub_closest_obstacles_marker;
 
     // to store, process and display both laserdata
     int nb_beams;
@@ -64,6 +65,11 @@ private:
 
     patrol_robot_development::ObstacleAvoidanceMsg obstacle_avoidance_msg;
 
+    // GRAPHICAL DISPLAY
+    int nb_pts;
+    geometry_msgs::Point display[2000];
+    std_msgs::ColorRGBA colors[2000];
+
 public:
     obstacle_avoidance() {
         frame_origin.x = 0;
@@ -75,14 +81,14 @@ public:
         sub_scan2 =
             n.subscribe("scan2", 1, &obstacle_avoidance::scanCallback2, this);
 
-        // sub_obstacle_detection =
-        //     n.subscribe("closest_obstacle", 1,
-        //                 &obstacle_avoidance::closest_obstacleCallback, this);
-
         // Communication with translation_action
         pub_closest_obstacles =
             n.advertise<patrol_robot_development::ObstacleAvoidanceMsg>(
                 "lateral_distances", 1);
+        pub_closest_obstacles_marker = n.advertise<visualization_msgs::Marker>(
+            "lateral_distance_marker",
+            1);  // Preparing a topic to publish our results. This will be used
+                 // by the visualization tool rviz
         init_laser  = false;
         init_laser2 = false;
 
@@ -120,7 +126,12 @@ public:
             for (int loop2 = 0; loop2 < 2; loop2++)
                 for (int loop = 0; loop < nb_beams;
                      loop++, beam_angle += angle_inc) {
-                    // Check the closest obstacle in the left (+80 degs)
+                    // Looking for the lateral of the robot
+                    // we assume the robot has a radius of 75cm
+                    if (fabs(current_scan[loop][loop2].x) > x_axis_limit)
+                        continue;
+
+                    // Check the closest obstacle in the left (+90 degs)
                     if (clamp(beam_angle) >= left_angle_start &&
                         (current_scan[loop][loop2].y > robair_size) &&
                         (fabs(lt_closest_obstacle.y) >
@@ -129,7 +140,7 @@ public:
                         lt_obstacle_detected = true;
                     }
 
-                    // Check the closest obstacle in the right (-80 degs)
+                    // Check the closest obstacle in the right (-90 degs)
                     if (clamp(beam_angle) <= right_angle_start &&
                         (current_scan[loop][loop2].y < -robair_size) &&
                         (fabs(rt_closest_obstacle.y) >
@@ -147,6 +158,30 @@ public:
                 obstacle_avoidance_msg.rt_obstacle_distance =
                     distancePoints(frame_origin, rt_closest_obstacle);
                 pub_closest_obstacles.publish(obstacle_avoidance_msg);
+
+                // closest obstacle left is green (if found)
+                nb_pts = 0;
+                if (lt_obstacle_detected) {
+                    display[nb_pts] = lt_closest_obstacle;
+
+                    colors[nb_pts].r = 0;
+                    colors[nb_pts].g = 1;
+                    colors[nb_pts].b = 0;
+                    colors[nb_pts].a = 1.0;
+                }
+                nb_pts++;
+
+                // closest obstacle right is pink (if found)
+                if (rt_obstacle_detected) {
+                    display[nb_pts] = rt_closest_obstacle;
+
+                    colors[nb_pts].r = 1;
+                    colors[nb_pts].g = 0;
+                    colors[nb_pts].b = 1;
+                    colors[nb_pts].a = 1.0;
+                }
+                nb_pts++;
+                populateMarkerTopic();
             }
         }
     }
@@ -186,6 +221,12 @@ public:
             current_scan[loop][0].z = 0.0;
         }
 
+        // ROS_WARN("range_min (scan1): %f\n range_max (scan1): %f\n angle_min "
+        //          "(scan1): %f\n angle_max (scan1): "
+        //          "%f\n angle_increment (scan1): %f,\n\n",
+        //          scan->range_min, scan->range_max, scan->angle_min,
+        //          scan->angle_max, scan->angle_increment);
+
     }  // scanCallback
 
     void scanCallback2(const sensor_msgs::LaserScan::ConstPtr &scan) {
@@ -215,22 +256,121 @@ public:
             current_scan[loop][1].y = range[loop][1] * sin(beam_angle);
             current_scan[loop][1].z = transform_laser.z;
         }
+
+        // ROS_WARN("range_min (scan2): %f\n range_max (scan2): %f\n angle_min "
+        //          "(scan2): %f\n angle_max (scan2): "
+        //          "%f\n angle_increment (scan2): %f,\n\n",
+        //          scan->range_min, scan->range_max, scan->angle_min,
+        //          scan->angle_max, scan->angle_increment);
     }  // scanCallback2
 
     void closest_obstacleCallback(const geometry_msgs::Point::ConstPtr &obs) {
         // init_obstacle    = true;
         // closest_obstacle = *obs;
     }  // closest_obstacleCallback
+
+    // Draw the field of view and other references
+    void populateMarkerReference() {
+        visualization_msgs::Marker references;
+
+        references.header.frame_id    = "laser";
+        references.header.stamp       = ros::Time::now();
+        references.ns                 = "example";
+        references.id                 = 1;
+        references.type               = visualization_msgs::Marker::LINE_STRIP;
+        references.action             = visualization_msgs::Marker::ADD;
+        references.pose.orientation.w = 1;
+
+        references.scale.x = 0.02;
+
+        references.color.r = 1.0f;
+        references.color.g = 1.0f;
+        references.color.b = 1.0f;
+        references.color.a = 1.0;
+        geometry_msgs::Point v;
+
+        v.x = 0.02 * cos(-2.356194);
+        v.y = 0.02 * sin(-2.356194);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        v.x = 5.6 * cos(-2.356194);
+        v.y = 5.6 * sin(-2.356194);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        float beam_angle = -2.356194 + 0.006136;
+        // first and last beam are already included
+        for (int i = 0; i < 723; i++, beam_angle += 0.006136) {
+            v.x = 5.6 * cos(beam_angle);
+            v.y = 5.6 * sin(beam_angle);
+            v.z = 0.0;
+            references.points.push_back(v);
+        }
+
+        v.x = 5.6 * cos(2.092350);
+        v.y = 5.6 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        v.x = 0.02 * cos(2.092350);
+        v.y = 0.02 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        pub_closest_obstacles_marker.publish(references);
+    }
+
+    void populateMarkerTopic() {
+        visualization_msgs::Marker marker;
+
+        marker.header.frame_id = "laser";
+        marker.header.stamp    = ros::Time::now();
+        marker.ns              = "example";
+        marker.id              = 0;
+        marker.type            = visualization_msgs::Marker::POINTS;
+        marker.action          = visualization_msgs::Marker::ADD;
+
+        marker.pose.orientation.w = 1;
+
+        marker.scale.x = 0.05;
+        marker.scale.y = 0.05;
+
+        marker.color.a = 1.0;
+
+        // ROS_INFO("%i points to display", nb_pts);
+        for (int loop = 0; loop < nb_pts; loop++) {
+            geometry_msgs::Point p;
+            std_msgs::ColorRGBA c;
+
+            p.x = display[loop].x;
+            p.y = display[loop].y;
+            p.z = display[loop].z;
+
+            c.r = colors[loop].r;
+            c.g = colors[loop].g;
+            c.b = colors[loop].b;
+            c.a = colors[loop].a;
+
+            // ROS_INFO("(%f, %f, %f) with rgba (%f, %f, %f, %f)", p.x, p.y,
+            // p.z, c.r, c.g, c.b, c.a);
+            marker.points.push_back(p);
+            marker.colors.push_back(c);
+        }
+
+        pub_closest_obstacles_marker.publish(marker);
+        populateMarkerReference();
+    }
 };
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "obstacle_avoidance");
     ros::NodeHandle n;
 
-    ROS_INFO("(obstacle_detection) PARAMETERS");
+    ROS_INFO("(obstacle_avoidance) PARAMETERS");
 
-    // ros::param::get("/obstacle_avoidance_node/robot_size", robair_size);
-    // ROS_INFO("(obstacle_avoidance) robot_size: %f", robair_size);
+    ros::param::get("/obstacle_avoidance_node/robot_size", robair_size);
+    ROS_INFO("(obstacle_avoidance) robot_size: %f", robair_size);
 
     obstacle_avoidance bsObject;
 
