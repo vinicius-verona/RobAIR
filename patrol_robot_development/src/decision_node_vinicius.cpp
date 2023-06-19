@@ -278,7 +278,7 @@ public:
             no_aruco            = true;
             msg_goal_to_reach   = aruco_position;
             msg_goal_to_reach.z = (float)current_state;
-            pub_goal_to_reach.publish(msg_goal_to_reach);
+            // pub_goal_to_reach.publish(msg_goal_to_reach);
         }
 
         if (new_aruco) {
@@ -290,7 +290,7 @@ public:
             geometry_msgs::Point msg_goal_to_reach;
             msg_goal_to_reach   = aruco_position;
             msg_goal_to_reach.z = (float)current_state;
-            pub_goal_to_reach.publish(msg_goal_to_reach);
+            // pub_goal_to_reach.publish(msg_goal_to_reach);
         }
 
         int old_frequency = frequency;
@@ -310,6 +310,7 @@ public:
         ROS_INFO("current_state: process_avoid_lateral_crash");
 
         geometry_msgs::Point middle_point;
+        geometry_msgs::Point msg_goal_to_reach;
         float lt_x = lt_closest_obstacle.x, rt_x = rt_closest_obstacle.x,
               lt_y = lt_closest_obstacle.y, rt_y = rt_closest_obstacle.y;
 
@@ -330,6 +331,9 @@ public:
             middle_point.x = lt_x + 1;
             middle_point.y = lt_y + 2;
         }
+
+        msg_goal_to_reach = middle_point;
+        pub_goal_to_reach.publish(msg_goal_to_reach);
 
     }  // process_avoid_lateral_crash
 
