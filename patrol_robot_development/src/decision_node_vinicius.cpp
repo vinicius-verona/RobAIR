@@ -315,16 +315,20 @@ public:
 
         // Simple case: where we have both measures
         if (!(lt_x == 0 && lt_y == 0) && !(rt_x == 0 && rt_y == 0)) {
-            middle_point.x = (lt_x + rt_x) / 2;
-            middle_point.z = (lt_y + rt_y) / 2;
+            middle_point.x = ((lt_x + rt_x) / 2) + 1;
+            middle_point.y = (lt_y + rt_y) / 2;
         }
 
         // We do not have the left measures
         if ((lt_x == 0 && lt_y == 0) && !(rt_x == 0 && rt_y == 0)) {
+            middle_point.x = rt_x + 1;
+            middle_point.y = rt_y + 2;
         }
 
         // We do not have the right measures
         if (!(lt_x == 0 && lt_y == 0) && (rt_x == 0 && rt_y == 0)) {
+            middle_point.x = lt_x + 1;
+            middle_point.y = lt_y + 2;
         }
 
     }  // process_avoid_lateral_crash
