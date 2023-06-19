@@ -13,6 +13,7 @@
 #include "std_msgs/Bool.h"
 #include "std_msgs/Float32.h"
 #include "std_msgs/String.h"
+#include "visualization_msgs/Marker.h"
 
 // Patrol robot processes
 #define searching_aruco_marker 0
@@ -54,6 +55,9 @@ float clamp(float orientation) {
 class decision_node {
 private:
     ros::NodeHandle n;
+
+    // DEBUG
+    ros::Publisher pub_goal_marker;
 
     // communication with robot_moving_node
     ros::Subscriber sub_robot_moving;
@@ -99,6 +103,11 @@ private:
     float m_max_base_distance, rot_sign_aruco_search;
     float base_orientation = 0;
 
+    // GRAPHICAL DISPLAY
+    int nb_pts;
+    geometry_msgs::Point display[2000];
+    std_msgs::ColorRGBA colors[2000];
+
 public:
     decision_node() {
         // communication with action_node
@@ -130,8 +139,13 @@ public:
         sub_obstacle_avoidance =
             n.subscribe("lateral_distances", 1,
                         &decision_node::lateral_distancesCallback, this);
+
         pub_change_odom =
             n.advertise<geometry_msgs::Point>("change_odometry", 1);
+
+        // DEBUG
+        pub_goal_marker =
+            n.advertise<visualization_msgs::Marker>("goal_to_reach_marker", 1);
 
         current_state  = searching_aruco_marker;
         previous_state = -1;
@@ -213,7 +227,7 @@ public:
         if (state_has_changed) {
             frequency               = 0;
             msg_rotation_to_do.data = rotation_to_base;
-            pub_rotation_to_do.publish(msg_rotation_to_do);
+            // pub_rotation_to_do.publish(msg_rotation_to_do);
             no_aruco = true;
 
             if (rotation_to_base > 0.0) {
@@ -237,7 +251,7 @@ public:
                     std_msgs::Float32 rot;
                     rot.data = (M_PI / 2.0 + (rand() % 6) / 6.0) *
                                rot_sign_aruco_search;
-                    pub_rotation_to_do.publish(rot);
+                    // pub_rotation_to_do.publish(rot);
                     no_aruco  = true;
                     frequency = 0;
                 } else {
@@ -261,7 +275,7 @@ public:
             }
             msg_rotation_to_do.data = aruco_rot;
             ROS_WARN("Aruco visible, correcting rotation\n");
-            pub_rotation_to_do.publish(msg_rotation_to_do);
+            // pub_rotation_to_do.publish(msg_rotation_to_do);
         }
 
         if (old_frequency != frequency)
@@ -329,11 +343,24 @@ public:
         // We do not have the right measures
         if (!(lt_x == 0 && lt_y == 0) && (rt_x == 0 && rt_y == 0)) {
             middle_point.x = lt_x + 1;
-            middle_point.y = lt_y + 2;
+            middle_point.y = lt_y - 2;
         }
 
         msg_goal_to_reach = middle_point;
         pub_goal_to_reach.publish(msg_goal_to_reach);
+
+        /* Display in RVIZ the point where the robair is supposed to go */
+        // goal_to_reach in rviz is white
+        // nb_pts           = 0;
+        // colors[nb_pts].r = 1;
+        // colors[nb_pts].g = 1;
+        // colors[nb_pts].b = 1;
+        // colors[nb_pts].a = 1.0;
+        // display[nb_pts]  = middle_point;
+        // nb_pts++;
+        // populateMarkerTopic();
+
+        current_state = searching_aruco_marker;
 
     }  // process_avoid_lateral_crash
 
@@ -375,10 +402,107 @@ public:
     float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {
         return sqrt(pow((pa.x - pb.x), 2.0) + pow((pa.y - pb.y), 2.0));
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // DEBUG
+    // ///////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Draw the field of view and other references
+    void populateMarkerReference() {
+        visualization_msgs::Marker references;
+
+        references.header.frame_id    = "laser";
+        references.header.stamp       = ros::Time::now();
+        references.ns                 = "example";
+        references.id                 = 1;
+        references.type               = visualization_msgs::Marker::LINE_STRIP;
+        references.action             = visualization_msgs::Marker::ADD;
+        references.pose.orientation.w = 1;
+
+        references.scale.x = 0.02;
+
+        references.color.r = 1.0f;
+        references.color.g = 1.0f;
+        references.color.b = 1.0f;
+        references.color.a = 1.0;
+        geometry_msgs::Point v;
+
+        v.x = 0.02 * cos(-2.356194);
+        v.y = 0.02 * sin(-2.356194);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        v.x = 5.6 * cos(-2.356194);
+        v.y = 5.6 * sin(-2.356194);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        float beam_angle = -2.356194 + 0.006136;
+        // first and last beam are already included
+        for (int i = 0; i < 723; i++, beam_angle += 0.006136) {
+            v.x = 5.6 * cos(beam_angle);
+            v.y = 5.6 * sin(beam_angle);
+            v.z = 0.0;
+            references.points.push_back(v);
+        }
+
+        v.x = 5.6 * cos(2.092350);
+        v.y = 5.6 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        v.x = 0.02 * cos(2.092350);
+        v.y = 0.02 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        pub_goal_marker.publish(references);
+    }
+
+    void populateMarkerTopic() {
+        visualization_msgs::Marker marker;
+
+        marker.header.frame_id = "laser";
+        marker.header.stamp    = ros::Time::now();
+        marker.ns              = "example";
+        marker.id              = 0;
+        marker.type            = visualization_msgs::Marker::POINTS;
+        marker.action          = visualization_msgs::Marker::ADD;
+
+        marker.pose.orientation.w = 1;
+
+        marker.scale.x = 0.05;
+        marker.scale.y = 0.05;
+
+        marker.color.a = 1.0;
+
+        // ROS_INFO("%i points to display", nb_pts);
+        for (int loop = 0; loop < nb_pts; loop++) {
+            geometry_msgs::Point p;
+            std_msgs::ColorRGBA c;
+
+            p.x = display[loop].x;
+            p.y = display[loop].y;
+            p.z = display[loop].z;
+
+            c.r = colors[loop].r;
+            c.g = colors[loop].g;
+            c.b = colors[loop].b;
+            c.a = colors[loop].a;
+
+            // ROS_INFO("(%f, %f, %f) with rgba (%f, %f, %f, %f)", p.x, p.y,
+            // p.z, c.r, c.g, c.b, c.a);
+            marker.points.push_back(p);
+            marker.colors.push_back(c);
+        }
+
+        pub_goal_marker.publish(marker);
+        populateMarkerReference();
+    }
 };
 
 int main(int argc, char** argv) {
-    ROS_INFO("(decision_node) waiting for a /person_position");
+    ROS_INFO("(decision_node)");
     ros::init(argc, argv, "decision");
 
     decision_node bsObject;

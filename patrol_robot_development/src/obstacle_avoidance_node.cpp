@@ -20,9 +20,9 @@
 #include "tf/transform_listener.h"
 #include "visualization_msgs/Marker.h"
 
-float robair_size = 0.75;  // 0.35 for small robair
+float robair_size = 0.5;  // 0.35 for small robair, 0.75 for philip's robair
 
-#define x_axis_limit 1.5   // meters
+#define x_axis_limit 1.5  // meters
 #define left_angle_start (90 * M_PI / 180)
 #define right_angle_start (-90 * M_PI / 180)
 

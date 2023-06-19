@@ -67,7 +67,12 @@ if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
     open_terminal "rosrun patrol_robot_development decision_patrol_robot_development_vinicius_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 3
-    set_window_position $wid $window_width 0 $window_width "$(($window_height * 2))" "Decision Welcome"
+    set_window_position $wid $window_width 0 $window_width $window_height "Decision Welcome"
+
+    open_terminal "rosrun patrol_robot_development obstacle_avoidance_patrol_robot_development_node"
+    wid=$(get_last_window_id)
+    move_to_workspace $wid 3
+    set_window_position $wid $window_width $window_height $window_width $window_height "Decision Welcome"
 
     open_terminal "rosrun patrol_robot_development rotation_patrol_robot_development_node"
     wid=$(get_last_window_id)
