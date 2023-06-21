@@ -15,10 +15,14 @@
 #include "std_msgs/String.h"
 #include "visualization_msgs/Marker.h"
 
+// Display goal_to_reach marker from avoid_lateral_crash
+#define DISPLAY_DEBUG 1
+
 // Patrol robot processes
 #define searching_aruco_marker 0
 #define moving_to_aruco_marker 1
 #define avoiding_lateral_crash 2
+#define bypass_obstacle 3
 
 // Future process
 // #define avoiding_obstacle 3
@@ -27,6 +31,7 @@
 
 #define safe_distance_from_aruco 1
 #define lateral_safety_threshold 0.75
+#define obstacle_safety_threshold 1
 
 #define DEBUG_GETCHAR_ENABLED 0
 
@@ -189,8 +194,10 @@ public:
                 process_searching_aruco_marker();
             else if (current_state == moving_to_aruco_marker)
                 process_moving_to_aruco_marker();
-            else
+            else if (current_state == avoiding_lateral_crash)
                 process_avoid_lateral_crash();
+            else
+                process_bypass_obstacle();
 
             new_aruco = false;
 
@@ -216,6 +223,15 @@ public:
                      "changing state.");
             current_state = avoiding_lateral_crash;
         }
+
+        // If the robot finds an obstacle in the way between target and current
+        // position apply an algorithm (APF), for example, to bypass it
+        if (closest_obstacle.x <= obstacle_safety_threshold &&
+            closest_obstacle.y <= obstacle_safety_threshold) {
+            ROS_WARN(
+                "Obstacle close to the robot, applying bypassing algorithm.");
+            current_state = bypass_obstacle;
+        }
     }  // update_variables
 
     // Patrol robot - processes
@@ -227,7 +243,7 @@ public:
         if (state_has_changed) {
             frequency               = 0;
             msg_rotation_to_do.data = rotation_to_base;
-            // pub_rotation_to_do.publish(msg_rotation_to_do);
+            pub_rotation_to_do.publish(msg_rotation_to_do);
             no_aruco = true;
 
             if (rotation_to_base > 0.0) {
@@ -251,7 +267,7 @@ public:
                     std_msgs::Float32 rot;
                     rot.data = (M_PI / 2.0 + (rand() % 6) / 6.0) *
                                rot_sign_aruco_search;
-                    // pub_rotation_to_do.publish(rot);
+                    pub_rotation_to_do.publish(rot);
                     no_aruco  = true;
                     frequency = 0;
                 } else {
@@ -275,7 +291,7 @@ public:
             }
             msg_rotation_to_do.data = aruco_rot;
             ROS_WARN("Aruco visible, correcting rotation\n");
-            // pub_rotation_to_do.publish(msg_rotation_to_do);
+            pub_rotation_to_do.publish(msg_rotation_to_do);
         }
 
         if (old_frequency != frequency)
@@ -292,7 +308,7 @@ public:
             no_aruco            = true;
             msg_goal_to_reach   = aruco_position;
             msg_goal_to_reach.z = (float)current_state;
-            // pub_goal_to_reach.publish(msg_goal_to_reach);
+            pub_goal_to_reach.publish(msg_goal_to_reach);
         }
 
         if (new_aruco) {
@@ -304,7 +320,7 @@ public:
             geometry_msgs::Point msg_goal_to_reach;
             msg_goal_to_reach   = aruco_position;
             msg_goal_to_reach.z = (float)current_state;
-            // pub_goal_to_reach.publish(msg_goal_to_reach);
+            pub_goal_to_reach.publish(msg_goal_to_reach);
         }
 
         int old_frequency = frequency;
@@ -349,20 +365,26 @@ public:
         msg_goal_to_reach = middle_point;
         pub_goal_to_reach.publish(msg_goal_to_reach);
 
-        /* Display in RVIZ the point where the robair is supposed to go */
-        // goal_to_reach in rviz is white
-        // nb_pts           = 0;
-        // colors[nb_pts].r = 1;
-        // colors[nb_pts].g = 1;
-        // colors[nb_pts].b = 1;
-        // colors[nb_pts].a = 1.0;
-        // display[nb_pts]  = middle_point;
-        // nb_pts++;
-        // populateMarkerTopic();
-
+/* Display in RVIZ the point where the robair is supposed to go */
+// goal_to_reach in rviz is white
+#ifdef DISPLAY_DEBUG
+        nb_pts           = 0;
+        colors[nb_pts].r = 1;
+        colors[nb_pts].g = 1;
+        colors[nb_pts].b = 1;
+        colors[nb_pts].a = 1.0;
+        display[nb_pts]  = middle_point;
+        nb_pts++;
+        populateMarkerTopic();
+#endif
         current_state = searching_aruco_marker;
 
     }  // process_avoid_lateral_crash
+
+    void process_bypass_obstacle() {
+        if (previous_state == moving_to_aruco_marker) {
+        }
+    }
 
     // CALLBACKS
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -390,7 +412,7 @@ public:
     }  // closest_obstacleCallback
 
     void lateral_distancesCallback(
-        const patrol_robot_development::ObstacleAvoidanceMsg::ConstPtr& obs) {
+        const patrol_robot_development::LateralDistancesMsg::ConstPtr& obs) {
         init_lateral_obstacles = true;
         lt_closest_obstacle    = obs->lt_obstacle_point;
         rt_closest_obstacle    = obs->rt_obstacle_point;

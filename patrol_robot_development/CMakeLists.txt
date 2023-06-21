@@ -117,11 +117,13 @@ add_executable(action_patrol_robot_development_node src/action_node.cpp)
 add_executable(obstacle_detection_patrol_robot_development_node src/obstacle_detection_node.cpp)
 add_executable(rotation_patrol_robot_development_node src/rotation_node.cpp)
 add_executable(localization_patrol_robot_development_node src/localization_node.cpp)
+add_executable(lateral_distances_patrol_robot_development_node src/lateral_distances_node.cpp)
 add_executable(obstacle_avoidance_patrol_robot_development_node src/obstacle_avoidance_node.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(datmo_node datmo_generate_messages_cpp)
+add_dependencies(lateral_distances_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(obstacle_avoidance_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
@@ -133,6 +135,7 @@ target_link_libraries(action_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(obstacle_detection_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(rotation_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(localization_patrol_robot_development_node ${catkin_LIBRARIES})
+target_link_libraries(lateral_distances_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(obstacle_avoidance_patrol_robot_development_node ${catkin_LIBRARIES})
 
 #############
