@@ -82,7 +82,7 @@ private:
     // Communication with obstacle_avoidance
     ros::Subscriber sub_obstacle_avoidance;
     ros::Publisher pub_obstacle_avoidance;
-    geometry_msgs::Point target;
+    patrol_robot_development::ObstacleAvoidanceMsg bypass_msg;
     geometry_msgs::Point bypass_done_target;
     float apf_in_execution;
 
@@ -390,6 +390,13 @@ public:
         } else {
             target = bypass_done_target;
         }
+
+        bypass_msg.goal_to_reach     = target;
+        bypass_msg.front_obstacle    = closest_obstacle;
+        bypass_msg.lt_obstacle_point = lt_closest_obstacle;
+        bypass_msg.rt_obstacle_point = rt_closest_obstacle;
+
+        pub_bypass_obstacle.publish(bypass_msg);
     }
 
     // CALLBACKS
@@ -428,6 +435,13 @@ public:
     void bypass_doneCallback(const patrol_robot_development::ObstacleAvoidedMsg::ConstPtr& obs) {
         bypass_done_target = obs->goal_to_reach;
         apf_in_execution   = obs->apf_in_execution;
+
+        // Done to lock/unlock the current process in bypass_obstacle
+        if (!apf_in_execution) {
+            current_state = searching_aruco_marker;
+        } else {
+            current_state = bypass_obstacle;
+        }
     }  // bypass_doneCallback
 
 }
