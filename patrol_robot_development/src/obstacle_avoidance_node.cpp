@@ -1,4 +1,5 @@
 // Signal handling
+#include <limits.h>
 #include <patrol_robot_development/ObstacleAvoidanceMsg.h>
 #include <signal.h>
 #include <tf/transform_datatypes.h>
@@ -54,9 +55,7 @@ float clamp(float orientation) {
 //        current_position: position of the robot in the map frame
 //        orientation: orientation of the robot in the map frame
 // Output: new_base_point: position of the base in the local frame of the robot
-geometry_msgs::Point transformPoint(geometry_msgs::Point &base,
-                                    geometry_msgs::Point &current_pos,
-                                    float orientation) {
+geometry_msgs::Point transformPoint(geometry_msgs::Point &base, geometry_msgs::Point &current_pos, float orientation) {
     geometry_msgs::Point new_base_point;
     float x = base.x - current_pos.x;
     float y = base.y - current_pos.y;
@@ -74,9 +73,16 @@ private:
     ros::Subscriber sub_scan;
     ros::Subscriber sub_scan2;
 
+    // Communication with odometry
+    ros::Subcriber sub_odometry;
+
     // communication with action_node
     ros::Publisher pub_goal_to_reach;
     ros::Publisher pub_rotation_to_do;
+
+    // Communication with Decision node
+    ros::Subscriber sub_bypass;
+    ros::Publisher pub_bypass_done;
 
     // to store, process and display both laserdata
     int nb_beams;
@@ -92,11 +98,17 @@ private:
     geometry_msgs::Point frame_origin;
 
     patrol_robot_development::ObstacleAvoidanceMsg obstacle_avoidance;
+    patrol_robot_development::ObstacleAvoidedMsg obstacle_avoided;
 
     geometry_msgs::Point front_closest_object;
     geometry_msgs::Point lt_obstacle_point;
     geometry_msgs::Point rt_obstacle_point;
     geometry_msgs::Point target;
+
+    bool init_odom;
+    float current_position;
+    float current_orientation;
+    float rotation_to_do;
 
     // GRAPHICAL DISPLAY
     int nb_pts;
@@ -109,23 +121,23 @@ public:
         frame_origin.y = 0;
 
         // Communication with laser scanner
-        sub_scan =
-            n.subscribe("scan", 1, &obstacle_avoidance::scanCallback, this);
-        sub_scan2 =
-            n.subscribe("scan2", 1, &obstacle_avoidance::scanCallback2, this);
+        sub_scan  = n.subscribe("scan", 1, &obstacle_avoidance::scanCallback, this);
+        sub_scan2 = n.subscribe("scan2", 1, &obstacle_avoidance::scanCallback2, this);
+
+        // Communication with odometry
+        sub_odometry = n.subscribe("odom", 1, &obstacle_avoidance::odometryCallback, this);
 
         // Communication with decision node
-        sub_bypass =
-            n.subscribe("bypass", 1, &obstacle_avoidance::bypassCallback, this);
+        sub_bypass = n.subscribe("bypass", 1, &obstacle_avoidance::bypassCallback, this);
 
         // Communication with action_node
-        pub_goal_to_reach =
-            n.advertise<geometry_msgs::Point>("goal_to_reach", 1);
-        pub_rotation_to_do =
-            n.advertise<std_msgs::Float32>("rotation_to_do", 1);
+        pub_goal_to_reach  = n.advertise<geometry_msgs::Point>("goal_to_reach", 1);
+        pub_rotation_to_do = n.advertise<std_msgs::Float32>("rotation_to_do", 1);
+        pub_bypass_done    = n.advertise<std_msgs::Float32>("rotation_to_do", 1);
 
         init_laser  = false;
         init_laser2 = false;
+        init_odom   = false;
 
         tf::StampedTransform transform;
         tf::TransformListener listener;
@@ -140,8 +152,8 @@ public:
             ros::spinOnce();  // each callback is called once to collect new
                               // data: laser + robot_moving
             update();         // processing of data
-            r.sleep();  // we wait if the processing (ie, callback+update) has
-                        // taken less than 0.1s (ie, 10 hz)
+            r.sleep();        // we wait if the processing (ie, callback+update) has
+                              // taken less than 0.1s (ie, 10 hz)
         }
     }
 
@@ -149,41 +161,102 @@ public:
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
     void update() {
+        if (!init_laser || !init_laser2 || !init_odom) {
+            ROS_WARN("Waiting for laser and odometry to be running...");
+            return;
+        }
+
+        float total_force_x;
+        float total_force_y;
+        geometry_msgs::Point next_goal;
         geometry_msgs::Point c_location;
         c_location.x = 0;
         c_location.y = 0;
 
-        // Artificial Potential Field algorithm
+        // Artificial Potential Field algorithm -> multiple obstacles one target
         // Attractive force
         if (distancePoints(c_location, target) <= target_radius) {
             // We are close enough to the target, we stop the robot and the
             // algorithm APF
+            obstacle_avoided.apf_in_execution = false;
+            obstacle_avoided.goal_to_reach    = target;
         } else {
             // We are not close enough to the target, we compute the attractive
             // force
-            float attractive_force_x = target_radius * k_a *
-                                       (c_location.x - target.x) /
-                                       distancePoints(c_location, target);
-            float attractive_force_y = target_radius * k_a *
-                                       (c_location.y - target.y) /
-                                       distancePoints(c_location, target);
+            float attractive_force_x =
+                target_radius * k_a * (c_location.x - target.x) / distancePoints(c_location, target);
+            float attractive_force_y =
+                target_radius * k_a * (c_location.y - target.y) / distancePoints(c_location, target);
+
+            total_force_x = attractive_force_x;
+            total_force_y = attractive_force_y;
+
+            // For each laser beam, we compute the repulsive force
+            for (int loop = 0; loop < nb_beams; loop++) {
+                int point_cluster_lidar1 = cluster[loop][0];
+                int point_cluster_lidar2 = cluster[loop][1];
+                int cluster_size_lidar1  = cluster_size[point_cluster_lidar1][0];
+                int cluster_size_lidar2  = cluster_size[point_cluster_lidar2][0];
+
+                // Find closest object to the robot for a given cluster
+                geometry_msgs::Point closest_point_object;
+                float min_dist_to_object = INT_MAX;
+
+                // for each of the points in that cluster, we compute the distance
+                // to the robot, and we keep the closest one
+                for (int i = 0; i < cluster_size_lidar1; i++) {
+                    float dist_to_object = distancePoint(c_location, cluster[point_cluster_lidar1][i]);
+                    if (dist_to_object < min_dist_to_object) {
+                        min_dist_to_object   = dist_to_object;
+                        closest_point_object = cluster[point_cluster_lidar1][i];
+                    }
+                }
+
+                // Repulsive force
+                float repulsive_force_x = 0;
+                float repulsive_force_y = 0;
+                if (min_dist_to_object <= p_0) {
+                    repulsive_force_x = -k_r * (1 / min_dist_to_object - 1 / p_0) *
+                                        ((-closest_point_object.x / distancePoint(c_location, closest_point_object)) /
+                                         pow(min_dist_to_object, 2));
+                    repulsive_force_y = -k_r * (1 / min_dist_to_object - 1 / p_0) *
+                                        ((-closest_point_object.y / distancePoint(c_location, closest_point_object)) /
+                                         pow(min_dist_to_object, 2));
+                }
+
+                // Compute the total force
+                total_force_x += repulsive_force_x;
+                total_force_y += repulsive_force_y;
+            }
+
+            // Compute the goal to reach
+            next_goal.x = c_location.x - (step * total_force_x);
+            next_goal.y = c_location.y - (step * total_force_y);
+
+            // TODO: check if the x axis for the goal to reach is greater in absolute value than the closest obstacle
+            // in front, we have to rotate the robot
+
+            // If the new x coordinate is negative, we just rotate to face the point.
+            if (next_goal.x < 0) {
+                rotation_to_do = acos(next_goal.x / distancePoints(c_location, next_goal));
+                if (next_goal.y < 0) {
+                    rotation_to_do = -rotation_to_do;
+                }
+                next.goal.x = 0;
+                next_goal.y = 0;
+            }
+
+            obstacle_avoided.apf_in_execution = true;
+            obstacle_avoided.goal_to_reach    = next_goal;
         }
 
-        // For each laser beam, we compute the repulsive force
-        for (int loop = 0; loop < nb_beams; loop++) {
-            int point_cluster_lidar1 = cluster[loop][0];
-            int point_cluster_lidar2 = cluster[loop][1];
-            int cluster_size_lidar1  = cluster_size[point_cluster_lidar1][0];
-            int cluster_size_lidar2  = cluster_size[point_cluster_lidar2][0];
+        // Publish messages
+        pub_bypass_done.publish(obstacle_avoided);
 
-            // Repulsive force
-
-            // // Middle point of the cluster in each lidiar
-            // geometry_msgs::Point middle_point_object_lidar1 =
-            //     cluster_middle[point_cluster_lidar1][0];
-            // geometry_msgs::Point middle_point_object_lidar2 =
-            //     cluster_middle[point_cluster_lidar2][1];
-        }
+        if (!rotation_to_do)
+            pub_goal_to_reach.publish(next_goal);
+        else
+            pub_rotation_to_do.publish(rotation_to_do);
     }
 
     // Distance between two points
@@ -191,95 +264,16 @@ public:
         return sqrt(pow((pa.x - pb.x), 2.0) + pow((pa.y - pb.y), 2.0));
     }
 
-    /*
-    void perform_clustering(int laser) {
-        // store in the table cluster, the cluster of each hit of the laser
-        // if the distance between the previous hit of the laser and the
-        // current
-        // one is higher than a threshold else we start a new cluster
-
-        ROS_INFO("performing clustering for laser %i", laser);
-
-        nb_cluster[laser] = 0;
-
-        cluster_start[0][laser] =
-            0;  // the first hit is the start of the first cluster
-        cluster[0][laser]      = 0;  // the first hit belongs to the first
-        cluster int nb_dynamic = 0;  // to count the number of hits of the
-                                     // current cluster that are dynamic
-
-        for (int loop = 1; loop < nb_beams; loop++)
-            if (distancePoints(current_scan[loop - 1][laser],
-                               current_scan[loop][laser]) < cluster_threshold) {
-                cluster[loop][laser] = nb_cluster[laser];
-                if (dynamic[loop][laser])
-                    nb_dynamic++;
-            } else {
-                int current_cluster =
-                    nb_cluster[laser];  // easier to read
-                                        // cluster_end[current_cluster][laser]
-                = loop - 1;
-
-                int current_start = cluster_start[current_cluster][laser];
-                int current_end   = cluster_end[current_cluster][laser];
-                cluster_dynamic[current_cluster][laser] =
-                    nb_dynamic * 100 / (current_end - current_start + 1);
-                cluster_size[current_cluster][laser] =
-                    distancePoints(current_scan[current_start][laser],
-                                   current_scan[current_end][laser]);
-                cluster_middle[current_cluster][laser].x =
-                    (current_scan[current_start][laser].x +
-                     current_scan[current_end][laser].x) /
-                    2;
-                cluster_middle[current_cluster][laser].y =
-                    (current_scan[current_start][laser].y +
-                     current_scan[current_end][laser].y) /
-                    2;
-                cluster_middle[current_cluster][laser].z =
-                    (current_scan[current_start][laser].z +
-                     current_scan[current_end][laser].z) /
-                    2;
-
-                nb_dynamic = 0;
-                nb_cluster[laser]++;
-                current_cluster++;
-
-                cluster_start[current_cluster][laser] = loop;
-                cluster[loop][laser]                  = current_cluster;
-                if (dynamic[loop])
-                    nb_dynamic++;
-            }
-
-        int current_cluster = nb_cluster[laser];  // easier to read
-        int current_start   = cluster_start[current_cluster][laser];
-        cluster_end[current_cluster][laser] = nb_beams - 1;
-        int current_end = cluster_end[current_cluster][laser];
-        cluster_dynamic[current_cluster][laser] =
-            nb_dynamic * 100 / (current_end - current_start + 1);
-        cluster_size[current_cluster][laser] =
-            distancePoints(current_scan[current_start][laser],
-                           current_scan[current_end][laser]);
-        cluster_middle[current_cluster][laser].x =
-            (current_scan[current_start][laser].x +
-             current_scan[current_end][laser].x) /
-            2;
-        cluster_middle[current_cluster][laser].y =
-            (current_scan[current_start][laser].y +
-             current_scan[current_end][laser].y) /
-            2;
-        cluster_middle[current_cluster][laser].z =
-            (current_scan[current_start][laser].z +
-             current_scan[current_end][laser].z) /
-            2;
-
-        nb_cluster[laser]++;
-
-    }  // perfor_clusterings
-    // */
-
     // CALLBACK
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
+
+    void odometryCallback(const nav_msgs::Odometry::ConstPtr &o) {
+        init_odom           = true;
+        current_position    = o->pose.pose.position;
+        current_orientation = tf::getYaw(o->pose.pose.orientation);
+    }  // odomCallback
+
     void scanCallback(const sensor_msgs::LaserScan::ConstPtr &scan) {
         init_laser = true;
 
@@ -295,8 +289,7 @@ public:
         // each hit
         float beam_angle = angle_min;
         for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
-            if ((scan->ranges[loop] < range_max) &&
-                (scan->ranges[loop] > range_min))
+            if ((scan->ranges[loop] < range_max) && (scan->ranges[loop] > range_min))
                 range[loop][0] = scan->ranges[loop];
             else
                 range[loop][0] = range_max;
@@ -324,22 +317,19 @@ public:
         // each hit
         float beam_angle = angle_min;
         for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
-            if ((scan->ranges[loop] < range_max) &&
-                (scan->ranges[loop] > range_min))
+            if ((scan->ranges[loop] < range_max) && (scan->ranges[loop] > range_min))
                 range[loop][1] = scan->ranges[loop];
             else
                 range[loop][1] = range_max /*+ 0.2*/;
 
             // transform the scan in cartesian framewrok
-            current_scan[loop][1].x =
-                transform_laser.x + range[loop][1] * cos(beam_angle);
+            current_scan[loop][1].x = transform_laser.x + range[loop][1] * cos(beam_angle);
             current_scan[loop][1].y = range[loop][1] * sin(beam_angle);
             current_scan[loop][1].z = transform_laser.z;
         }
     }  // scanCallback2
 
-    void bypassCallback(
-        const patrol_robot_development::ObstacleAvoidanceMsg::ConstPtr &msg) {
+    void bypassCallback(const patrol_robot_development::ObstacleAvoidanceMsg::ConstPtr &msg) {
         front_closest_object = msg->front_obstacle;
         lt_obstacle_point    = msg->lt_obstacle_point;
         rt_obstacle_point    = msg->rt_obstacle_point;
