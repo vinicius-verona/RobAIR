@@ -79,10 +79,15 @@ if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
     move_to_workspace $wid 3
     set_window_position $wid 0 0 $window_width $window_height "Rotation Welcome"
 
-    open_terminal "rosrun patrol_robot_development action_patrol_robot_development_node"
+    open_terminal "rosrun patrol_robot_development lateral_distances_patrol_robot_development_node"
     wid=$(get_last_window_id)
     move_to_workspace $wid 3
-    set_window_position $wid 0  $window_height $window_width $window_height "Action Welcome"
+    set_window_position $wid 0  $window_height $window_width $window_height "Lateral Distances Welcome"
+
+    # open_terminal "rosrun patrol_robot_development action_patrol_robot_development_node"
+    # wid=$(get_last_window_id)
+    # move_to_workspace $wid 3
+    # set_window_position $wid 0  $window_height $window_width $window_height "Action Welcome"
 else
     sudo apt-get install wmctrl  -y
     sudo apt-get install xdotool -y
