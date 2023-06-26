@@ -18,7 +18,7 @@
 #include "visualization_msgs/Marker.h"
 
 // Display goal_to_reach marker from avoid_lateral_crash
-#define DISPLAY_DEBUG 1
+// #define DISPLAY_DEBUG 1
 
 // Patrol robot processes
 #define searching_aruco_marker 0

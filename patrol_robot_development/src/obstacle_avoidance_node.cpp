@@ -23,6 +23,9 @@
 #include "tf/transform_listener.h"
 #include "visualization_msgs/Marker.h"
 
+// Display goal_to_reach marker
+#define DISPLAY_DEBUG 1
+
 float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 
 #define x_axis_limit 1.5  // meters
@@ -141,6 +144,9 @@ private:
     geometry_msgs::Point display[2000];
     std_msgs::ColorRGBA colors[2000];
 
+    // DEBUG
+    ros::Publisher pub_goal_marker;
+
 public:
     obstacle_avoidance() {
         frame_origin.x = 0;
@@ -162,6 +168,9 @@ public:
         pub_bypass_done    = n.advertise<patrol_robot_development::ObstacleAvoidedMsg>("bypass_done", 1);
 
         sub_robot_moving = n.subscribe("robot_moving", 1, &obstacle_avoidance::robot_movingCallback, this);
+
+        // DEBUG
+        pub_goal_marker = n.advertise<visualization_msgs::Marker>("goal_to_reach_marker", 1);
 
         init_laser  = false;
         init_laser2 = false;
@@ -295,6 +304,8 @@ public:
             obstacle_avoided_msg.goal_to_reach    = next_goal;
         }
 
+#ifndef DISPLAY_DEBUG
+
         // Publish messages
         pub_bypass_done.publish(obstacle_avoided_msg);
 
@@ -305,6 +316,27 @@ public:
             msg_rotation_to_do.data = rotation_to_do;
             pub_rotation_to_do.publish(msg_rotation_to_do);
         }
+
+#endif
+#ifdef DISPLAY_DEBUG
+        // populate marker with goal_to_reach and target
+        // goal_to_reach is pink and target is blue-greenish
+        nb_pts           = 0;
+        colors[nb_pts].r = 1;
+        colors[nb_pts].g = 0;
+        colors[nb_pts].b = 1;
+        colors[nb_pts].a = 1.0;
+        display[nb_pts]  = next_goal;
+        nb_pts++;
+
+        colors[nb_pts].r = 0;
+        colors[nb_pts].g = 1;
+        colors[nb_pts].b = 0;
+        colors[nb_pts].a = 1.0;
+        display[nb_pts]  = target;
+        nb_pts++;
+        populateMarkerTopic();
+#endif
     }
 
     // Distance between two points
@@ -505,6 +537,102 @@ public:
         init_robot           = true;
         current_robot_moving = state->data;
     }  // robot_movingCallback
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // DEBUG
+    // ///////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Draw the field of view and other references
+    void populateMarkerReference() {
+        visualization_msgs::Marker references;
+
+        references.header.frame_id    = "laser";
+        references.header.stamp       = ros::Time::now();
+        references.ns                 = "example";
+        references.id                 = 1;
+        references.type               = visualization_msgs::Marker::LINE_STRIP;
+        references.action             = visualization_msgs::Marker::ADD;
+        references.pose.orientation.w = 1;
+
+        references.scale.x = 0.02;
+
+        references.color.r = 1.0f;
+        references.color.g = 1.0f;
+        references.color.b = 1.0f;
+        references.color.a = 1.0;
+        geometry_msgs::Point v;
+
+        v.x = 0.02 * cos(-2.356194);
+        v.y = 0.02 * sin(-2.356194);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        v.x = 5.6 * cos(-2.356194);
+        v.y = 5.6 * sin(-2.356194);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        float beam_angle = -2.356194 + 0.006136;
+        // first and last beam are already included
+        for (int i = 0; i < 723; i++, beam_angle += 0.006136) {
+            v.x = 5.6 * cos(beam_angle);
+            v.y = 5.6 * sin(beam_angle);
+            v.z = 0.0;
+            references.points.push_back(v);
+        }
+
+        v.x = 5.6 * cos(2.092350);
+        v.y = 5.6 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        v.x = 0.02 * cos(2.092350);
+        v.y = 0.02 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        pub_goal_marker.publish(references);
+    }
+
+    void populateMarkerTopic() {
+        visualization_msgs::Marker marker;
+
+        marker.header.frame_id = "laser";
+        marker.header.stamp    = ros::Time::now();
+        marker.ns              = "example";
+        marker.id              = 0;
+        marker.type            = visualization_msgs::Marker::POINTS;
+        marker.action          = visualization_msgs::Marker::ADD;
+
+        marker.pose.orientation.w = 1;
+
+        marker.scale.x = 0.05;
+        marker.scale.y = 0.05;
+
+        marker.color.a = 1.0;
+
+        // ROS_INFO("%i points to display", nb_pts);
+        for (int loop = 0; loop < nb_pts; loop++) {
+            geometry_msgs::Point p;
+            std_msgs::ColorRGBA c;
+
+            p.x = display[loop].x;
+            p.y = display[loop].y;
+            p.z = display[loop].z;
+
+            c.r = colors[loop].r;
+            c.g = colors[loop].g;
+            c.b = colors[loop].b;
+            c.a = colors[loop].a;
+
+            // ROS_INFO("(%f, %f, %f) with rgba (%f, %f, %f, %f)", p.x, p.y,
+            // p.z, c.r, c.g, c.b, c.a);
+            marker.points.push_back(p);
+            marker.colors.push_back(c);
+        }
+
+        pub_goal_marker.publish(marker);
+        populateMarkerReference();
+    }
 };
 
 int main(int argc, char **argv) {
