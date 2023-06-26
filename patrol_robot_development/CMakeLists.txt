@@ -112,7 +112,7 @@ include_directories(
 
 ## Declare a cpp executable
 add_executable(decision_patrol_robot_development_node src/decision_node.cpp)
-add_executable(datmo_patrol_robot_development_node src/datmo_node.cpp)
+add_executable(datmo_patrol_robot_development_node src/datmo_2laser_node.cpp)
 add_executable(robot_moving_patrol_robot_development_node src/robot_moving_node.cpp)
 add_executable(action_patrol_robot_development_node src/action_node.cpp)
 add_executable(obstacle_detection_patrol_robot_development_node src/obstacle_detection_node.cpp)
@@ -126,7 +126,6 @@ add_executable(obstacle_avoidance_patrol_robot_development_node src/obstacle_avo
 # add_dependencies(datmo_node datmo_generate_messages_cpp)
 add_dependencies(lateral_distances_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(obstacle_avoidance_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(obstacle_avoided_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(decision_patrol_robot_development_node ${catkin_LIBRARIES})
