@@ -311,6 +311,11 @@ public:
     void process_moving_to_aruco_marker() {
         ROS_INFO("current_state: moving_to_aruco_marker");
 
+        if (apf_in_execution) {
+            ROS_ERROR("APF in execution, cannot move to aruco marker.");
+            return;
+        }
+
         if (state_has_changed) {
             // Send the goal to reach
             geometry_msgs::Point msg_goal_to_reach;
@@ -318,6 +323,11 @@ public:
             no_aruco            = true;
             msg_goal_to_reach   = aruco_position;
             msg_goal_to_reach.z = (float)current_state;
+
+            if (msg_goal_to_reach.x == 0.0 && msg_goal_to_reach.y == 0.0) {
+                ROS_ERROR("Aruco marker position is (0,0), cannot move to it. [Decision node]");
+                return;
+            }
             pub_goal_to_reach.publish(msg_goal_to_reach);
         }
 
@@ -329,6 +339,11 @@ public:
             geometry_msgs::Point msg_goal_to_reach;
             msg_goal_to_reach   = aruco_position;
             msg_goal_to_reach.z = (float)current_state;
+
+            if (msg_goal_to_reach.x == 0.0 && msg_goal_to_reach.y == 0.0) {
+                ROS_ERROR("Aruco marker position is (0,0), cannot move to it. [Decision node]");
+                return;
+            }
             pub_goal_to_reach.publish(msg_goal_to_reach);
         }
 

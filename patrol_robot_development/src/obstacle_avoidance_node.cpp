@@ -304,7 +304,12 @@ public:
             obstacle_avoided_msg.goal_to_reach    = next_goal;
         }
 
-#ifndef DISPLAY_DEBUG
+#ifdef DISPLAY_DEBUG
+
+        if (next_goal.x == 0.0 && next_goal.y == 0.0) {
+            ROS_ERROR("Aruco marker position is (0,0), cannot move to it. [Obstacle avoidance node]");
+            return;
+        }
 
         // Publish messages
         pub_bypass_done.publish(obstacle_avoided_msg);
