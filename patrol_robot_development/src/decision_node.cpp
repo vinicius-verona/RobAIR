@@ -173,6 +173,9 @@ public:
         origin_position.z = 0;  // used when passing to reset odom, encodes
                                 // orientation around z axis in radians.
 
+        target.x = 0;
+        target.y = 0;
+
         m_max_base_distance = MAX_BASE_DIST;
 
         rot_sign_aruco_search = 1.0;
@@ -206,8 +209,7 @@ public:
             else
                 process_bypass_obstacle();
 
-            new_aruco = false;
-
+            new_aruco         = false;
             state_has_changed = current_state != previous_state;
             previous_state    = current_state;
 
@@ -235,7 +237,8 @@ public:
 
         // If the robot finds an obstacle in the way between target and current
         // position apply an algorithm (APF), for example, to bypass it
-        if (closest_obstacle.x <= obstacle_safety_threshold && closest_obstacle.y <= obstacle_safety_threshold) {
+        if (closest_obstacle.x <= obstacle_safety_threshold && closest_obstacle.y <= obstacle_safety_threshold &&
+            previous_state == moving_to_aruco_marker) {
             ROS_WARN("Obstacle close to the robot, applying bypassing algorithm.");
             current_state = bypass_obstacle;
         }
@@ -298,6 +301,7 @@ public:
             msg_rotation_to_do.data = aruco_rot;
             ROS_WARN("Aruco visible, correcting rotation\n");
             pub_rotation_to_do.publish(msg_rotation_to_do);
+            target = aruco_position;
         }
 
         if (old_frequency != frequency)
