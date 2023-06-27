@@ -151,7 +151,7 @@ public:
 
         // Communication with obstacle_avoidance
         sub_obstacle_avoidance = n.subscribe("bypass_done", 1, &decision_node::bypass_doneCallback, this);
-        pub_obstacle_avoidance = n.advertise<geometry_msgs::Point>("bypass", 1);
+        pub_obstacle_avoidance = n.advertise<patrol_robot_development::ObstacleAvoidancedMsg>("bypass", 1);
 
         pub_change_odom = n.advertise<geometry_msgs::Point>("change_odometry", 1);
 
@@ -240,8 +240,8 @@ public:
         if (closest_obstacle.x <= obstacle_safety_threshold && closest_obstacle.y <= obstacle_safety_threshold &&
             previous_state == moving_to_aruco_marker) {
             ROS_WARN("Obstacle close to the robot, applying bypassing algorithm.");
-            current_state    = bypass_obstacle;
-            apf_in_execution = true;
+            current_state = bypass_obstacle;
+            // apf_in_execution = true;
 
             // Stop the robot if it is moving
             if (robot_moving) {
@@ -311,6 +311,9 @@ public:
             msg_rotation_to_do.data = aruco_rot;
             ROS_WARN("Aruco visible, correcting rotation\n");
             pub_rotation_to_do.publish(msg_rotation_to_do);
+        }
+
+        if (aruco_position.x != 0 && aruco_position.y != 0) {
             target = aruco_position;
         }
 
@@ -419,7 +422,7 @@ public:
         ROS_INFO("current_state: process_bypass_obstacle");
 
         // if there is no aruco position, skip it
-        if (aruco_position.x == 0 && aruco_position.y == 0) {
+        if (!apf_in_execution && aruco_position.x == 0 && aruco_position.y == 0) {
             ROS_ERROR("Aruco marker position is (0,0), there is no reason to bypass obstacle. [Decision node]");
             current_state = searching_aruco_marker;
             return;
@@ -435,6 +438,7 @@ public:
         bypass_msg.front_obstacle    = closest_obstacle;
         bypass_msg.lt_obstacle_point = lt_closest_obstacle;
         bypass_msg.rt_obstacle_point = rt_closest_obstacle;
+        bypass_msg.target_found      = aruco_position.x == 0 && aruco_position.y == 0 ? false : true;
 
         pub_obstacle_avoidance.publish(bypass_msg);
     }
