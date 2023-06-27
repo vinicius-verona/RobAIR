@@ -43,8 +43,8 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 #define k_a 1              // attractive force constant
 #define k_r 1              // repulsive force constant
 #define step 1             // step size
-#define target_radius 0.5  // radius of the target
-#define p_0 0.5            // constant for the repulsive force, 
+#define target_radius 1    // radius of the target
+#define p_0 1              // constant for the repulsive force, 
                            // where P(x) is the minimum distance
                            // between the robot and the obstacle
 // clang-format on
@@ -202,12 +202,6 @@ public:
             ROS_WARN("Waiting for laser and odometry to be running...");
             return;
         }
-
-        detect_motion(0);
-        detect_motion(1);
-        perform_clustering(0);
-        perform_clustering(1);
-
         float total_force_x;
         float total_force_y;
         geometry_msgs::Point next_goal;
@@ -215,6 +209,20 @@ public:
         c_location.x   = 0;
         c_location.y   = 0;
         rotation_to_do = 0;
+
+        // Stop the robot if it is moving
+        if (current_robot_moving) {
+            pub_goal_to_reach.publish(c_location);
+        }
+
+        detect_motion(0);
+        detect_motion(1);
+        perform_clustering(0);
+        perform_clustering(1);
+
+        // Print as error the target, the c_location and the distance between these two
+        ROS_ERROR("Target: (%f, %f)\n C_location: (%f, %f)\n Distance: %f", target.x, target.y, c_location.x,
+                  c_location.y, distancePoints(c_location, target));
 
         // Artificial Potential Field algorithm -> multiple obstacles one target
         // Attractive force
@@ -248,15 +256,6 @@ public:
                 float min_dist_to_object_1                  = distancePoints(c_location, closest_point_object_1);
                 float min_dist_to_object_2                  = distancePoints(c_location, closest_point_object_2);
                 float min_dist_to_object                    = 0;
-                // for each of the points in that cluster, we compute the distance
-                // to the robot, and we keep the closest one
-                // for (int i = 0; i < cluster_size_lidar1; i++) {
-                //     float dist_to_object = distancePoints(c_location, current_scan[point_cluster_lidar1][i]);
-                //     if (dist_to_object < min_dist_to_object) {
-                //         min_dist_to_object   = dist_to_object;
-                //         closest_point_object = cluster[point_cluster_lidar1][i];
-                //     }
-                // }
 
                 if (min_dist_to_object_1 < min_dist_to_object_2) {
                     closest_point_object = closest_point_object_1;
@@ -269,7 +268,7 @@ public:
                 // Repulsive force
                 float repulsive_force_x = 0;
                 float repulsive_force_y = 0;
-                if (min_dist_to_object <= p_0) {
+                if (min_dist_to_object <= p_0 * 1.5) {
                     repulsive_force_x = -k_r * (1 / min_dist_to_object - 1 / p_0) *
                                         ((-closest_point_object.x / distancePoints(c_location, closest_point_object)) /
                                          pow(min_dist_to_object, 2));
@@ -282,6 +281,9 @@ public:
                 total_force_x += repulsive_force_x;
                 total_force_y += repulsive_force_y;
             }
+
+            ROS_WARN("total_force: (%f, %f)\n times step = (%f, %f)", total_force_x, total_force_y,
+                     total_force_x * step, total_force_y * step);
 
             // Compute the goal to reach
             next_goal.x = c_location.x - (step * total_force_x);

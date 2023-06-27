@@ -409,12 +409,12 @@ public:
     void process_bypass_obstacle() {
         ROS_INFO("current_state: process_bypass_obstacle");
         if (!apf_in_execution) {
-            target = aruco_position;
+            target                   = aruco_position;
+            bypass_msg.goal_to_reach = target;
         } else {
-            target = bypass_done_target;
+            bypass_msg.goal_to_reach = bypass_done_target;
         }
 
-        bypass_msg.goal_to_reach     = target;
         bypass_msg.front_obstacle    = closest_obstacle;
         bypass_msg.lt_obstacle_point = lt_closest_obstacle;
         bypass_msg.rt_obstacle_point = rt_closest_obstacle;
