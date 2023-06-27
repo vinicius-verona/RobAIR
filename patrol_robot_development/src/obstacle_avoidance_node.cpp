@@ -212,8 +212,8 @@ public:
             return;
         }
 
-        float total_force_x;
-        float total_force_y;
+        float total_force_x = 0;
+        float total_force_y = 0;
         geometry_msgs::Point next_goal;
         geometry_msgs::Point c_location;
         c_location.x   = 0;
@@ -274,10 +274,10 @@ public:
                 float repulsive_force_x = 0;
                 float repulsive_force_y = 0;
                 if (min_dist_to_object <= p_0 * 1.5) {
-                    repulsive_force_x = -k_r * (1 / min_dist_to_object - 1 / p_0) *
+                    repulsive_force_x = -k_r * ((1 / min_dist_to_object) - (1 / p_0)) *
                                         ((-closest_point_object.x / distancePoints(c_location, closest_point_object)) /
                                          pow(min_dist_to_object, 2));
-                    repulsive_force_y = -k_r * (1 / min_dist_to_object - 1 / p_0) *
+                    repulsive_force_y = -k_r * ((1 / min_dist_to_object) - (1 / p_0)) *
                                         ((-closest_point_object.y / distancePoints(c_location, closest_point_object)) /
                                          pow(min_dist_to_object, 2));
                 }
