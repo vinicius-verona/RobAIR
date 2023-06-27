@@ -183,6 +183,9 @@ public:
         transform_laser.y = 0;
         transform_laser.z = 1.2;
 
+        target.x = 0;
+        target.y = 0;
+
         // INFINTE LOOP TO COLLECT LASER DATA AND PROCESS THEM
         ros::Rate r(10);      // this node will run at 10hz
         while (ros::ok()) {
@@ -202,6 +205,13 @@ public:
             ROS_WARN("Waiting for laser and odometry to be running...");
             return;
         }
+
+        // In case the decision node has not provided a target, we can exit
+        if (target.x == 0 && target.y == 0) {
+            ROS_WARN("Waiting for a target...");
+            return;
+        }
+
         float total_force_x;
         float total_force_y;
         geometry_msgs::Point next_goal;
@@ -366,7 +376,7 @@ public:
             } else
                 dynamic[loop][laser] = false;
 
-        ROS_INFO("%i points are dynamic", nb_pts);
+        // ROS_INFO("%i points are dynamic", nb_pts);
         // populateMarkerTopic();
         // getchar();
 
@@ -407,12 +417,12 @@ public:
                 cluster_middle[current_cluster][laser].z =
                     (current_scan[current_start][laser].z + current_scan[current_end][laser].z) / 2;
 
-                ROS_INFO("cluster[%i](%f, %f): [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i, %f",
-                         current_cluster, cluster_middle[current_cluster][laser].x,
-                         cluster_middle[current_cluster][laser].y, current_start, current_scan[current_start][laser].x,
-                         current_scan[current_start][laser].y, current_end, current_scan[current_end][laser].x,
-                         current_scan[current_end][laser].y, cluster_size[current_cluster][laser], nb_dynamic,
-                         cluster_dynamic[current_cluster][laser]);
+                // ROS_INFO("cluster[%i](%f, %f): [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i, %f",
+                //          current_cluster, cluster_middle[current_cluster][laser].x,
+                //          cluster_middle[current_cluster][laser].y, current_start,
+                //          current_scan[current_start][laser].x, current_scan[current_start][laser].y, current_end,
+                //          current_scan[current_end][laser].x, current_scan[current_end][laser].y,
+                //          cluster_size[current_cluster][laser], nb_dynamic, cluster_dynamic[current_cluster][laser]);
 
                 nb_dynamic = 0;
                 nb_cluster[laser]++;
@@ -453,11 +463,11 @@ public:
         cluster_middle[current_cluster][laser].z =
             (current_scan[current_start][laser].z + current_scan[current_end][laser].z) / 2;
 
-        ROS_INFO("cluster[%i](%f, %f): [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i, %f", current_cluster,
-                 cluster_middle[current_cluster][laser].x, cluster_middle[current_cluster][laser].y, current_start,
-                 current_scan[current_start][laser].x, current_scan[current_start][laser].y, current_end,
-                 current_scan[current_end][laser].x, current_scan[current_end][laser].y,
-                 cluster_size[current_cluster][laser], nb_dynamic, cluster_dynamic[current_cluster][laser]);
+        // ROS_INFO("cluster[%i](%f, %f): [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i, %f", current_cluster,
+        //          cluster_middle[current_cluster][laser].x, cluster_middle[current_cluster][laser].y, current_start,
+        //          current_scan[current_start][laser].x, current_scan[current_start][laser].y, current_end,
+        //          current_scan[current_end][laser].x, current_scan[current_end][laser].y,
+        //          cluster_size[current_cluster][laser], nb_dynamic, cluster_dynamic[current_cluster][laser]);
 
         nb_cluster[laser]++;
 

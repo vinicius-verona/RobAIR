@@ -42,10 +42,10 @@ window_height=$((screen_height / 2))
 
 
 if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
-    open_terminal "roslaunch robairmain robair_ufr.launch"
-    wid=$(get_last_window_id)
-    move_to_workspace $wid 1
-    set_window_position $wid 0 0 $window_width "$(($window_height * 2))" "Roslaunch"
+    # open_terminal "roslaunch robairmain robair_ufr.launch"
+    # wid=$(get_last_window_id)
+    # move_to_workspace $wid 1
+    # set_window_position $wid 0 0 $window_width "$(($window_height * 2))" "Roslaunch"
 
     open_terminal "rosrun robair_detection_navigation robair_webcam_one.py"
     wid=$(get_last_window_id)
