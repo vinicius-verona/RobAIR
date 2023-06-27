@@ -237,6 +237,8 @@ public:
             obstacle_avoided_msg.apf_in_execution = false;
             obstacle_avoided_msg.goal_to_reach    = target;
         } else {
+            // TODO: print distancePoints(c_location, target)
+
             // We are not close enough to the target, we compute the attractive
             // force
             float attractive_force_x =
@@ -281,6 +283,9 @@ public:
                                         ((-closest_point_object.y / distancePoints(c_location, closest_point_object)) /
                                          pow(min_dist_to_object, 2));
                 }
+
+                // TODO: print distancePoints(c_location, closest_point_object)
+                // TODO: print pow(min_dist_to_object, 2)
 
                 // Compute the total force
                 total_force_x += repulsive_force_x;
