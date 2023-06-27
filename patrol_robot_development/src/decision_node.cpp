@@ -240,7 +240,8 @@ public:
         if (closest_obstacle.x <= obstacle_safety_threshold && closest_obstacle.y <= obstacle_safety_threshold &&
             previous_state == moving_to_aruco_marker) {
             ROS_WARN("Obstacle close to the robot, applying bypassing algorithm.");
-            current_state = bypass_obstacle;
+            current_state    = bypass_obstacle;
+            apf_in_execution = true;
         }
     }  // update_variables
 
@@ -408,8 +409,7 @@ public:
     void process_bypass_obstacle() {
         ROS_INFO("current_state: process_bypass_obstacle");
         if (!apf_in_execution) {
-            apf_in_execution = true;
-            target           = aruco_position;
+            target = aruco_position;
         } else {
             target = bypass_done_target;
         }
