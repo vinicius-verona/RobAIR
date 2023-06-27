@@ -220,11 +220,6 @@ public:
         c_location.y   = 0;
         rotation_to_do = 0;
 
-        // Stop the robot if it is moving
-        if (current_robot_moving) {
-            pub_goal_to_reach.publish(c_location);
-        }
-
         detect_motion(0);
         detect_motion(1);
         perform_clustering(0);

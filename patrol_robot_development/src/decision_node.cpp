@@ -242,6 +242,15 @@ public:
             ROS_WARN("Obstacle close to the robot, applying bypassing algorithm.");
             current_state    = bypass_obstacle;
             apf_in_execution = true;
+
+            // Stop the robot if it is moving
+            if (robot_moving) {
+                geometry_msgs::Point center;
+                center.x = 0;
+                center.y = 0;
+
+                pub_goal_to_reach.publish(center);
+            }
         }
     }  // update_variables
 
@@ -408,6 +417,14 @@ public:
 
     void process_bypass_obstacle() {
         ROS_INFO("current_state: process_bypass_obstacle");
+
+        // if there is no aruco position, skip it
+        if (aruco_position.x == 0 && aruco_position.y == 0) {
+            ROS_ERROR("Aruco marker position is (0,0), there is no reason to bypass obstacle. [Decision node]");
+            current_state = searching_aruco_marker;
+            return;
+        }
+
         if (!apf_in_execution) {
             target                   = aruco_position;
             bypass_msg.goal_to_reach = target;
