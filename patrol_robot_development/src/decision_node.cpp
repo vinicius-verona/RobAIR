@@ -151,7 +151,7 @@ public:
 
         // Communication with obstacle_avoidance
         sub_obstacle_avoidance = n.subscribe("bypass_done", 1, &decision_node::bypass_doneCallback, this);
-        pub_obstacle_avoidance = n.advertise<patrol_robot_development::ObstacleAvoidancedMsg>("bypass", 1);
+        pub_obstacle_avoidance = n.advertise<patrol_robot_development::ObstacleAvoidanceMsg>("bypass", 1);
 
         pub_change_odom = n.advertise<geometry_msgs::Point>("change_odometry", 1);
 

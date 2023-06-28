@@ -40,10 +40,10 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 
 // Parameters for the Artifcial Potential Field bypass algorithm
 // clang-format off
-#define k_a 1              // attractive force constant
-#define k_r 1              // repulsive force constant
+#define k_a 5              // attractive force constant
+#define k_r 3              // repulsive force constant
 #define step 1             // step size
-#define target_radius 1    // radius of the target
+#define target_radius 0.5  // radius of the target
 #define p_0 1              // constant for the repulsive force, 
                            // where P(x) is the minimum distance
                            // between the robot and the obstacle
@@ -218,6 +218,8 @@ public:
         geometry_msgs::Point c_location;
         c_location.x   = 0;
         c_location.y   = 0;
+        next_goal.x    = 0;
+        next_goal.y    = 0;
         rotation_to_do = 0;
 
         detect_motion(0);
@@ -236,6 +238,7 @@ public:
             // algorithm APF
             obstacle_avoided_msg.apf_in_execution = false;
             obstacle_avoided_msg.goal_to_reach    = target;
+            pub_bypass_done.publish(obstacle_avoided_msg);
         } else {
             // TODO: print distancePoints(c_location, target)
 
@@ -287,6 +290,10 @@ public:
                 // TODO: print distancePoints(c_location, closest_point_object)
                 // TODO: print pow(min_dist_to_object, 2)
 
+                ROS_WARN("min_dist_to_object_1: %f | min_dist_to_object_2: %f \npow(min_dist,2): %f",
+                         min_dist_to_object_1, min_dist_to_object_2, pow(min_dist_to_object, 2));
+                ROS_WARN("repulsive_force: (%f, %f)", repulsive_force_x, repulsive_force_y);
+
                 // Compute the total force
                 total_force_x += repulsive_force_x;
                 total_force_y += repulsive_force_y;
@@ -314,46 +321,46 @@ public:
 
             obstacle_avoided_msg.apf_in_execution = true;
             obstacle_avoided_msg.goal_to_reach    = next_goal;
-        }
 
 #ifdef DISPLAY_DEBUG
 
-        if (next_goal.x == 0.0 && next_goal.y == 0.0) {
-            ROS_ERROR("Aruco marker position is (0,0), cannot move to it. [Obstacle avoidance node]");
-            return;
-        }
+            if (next_goal.x == 0.0 && next_goal.y == 0.0) {
+                ROS_ERROR("Aruco marker position is (0,0), cannot move to it. [Obstacle avoidance node]");
+                return;
+            }
 
-        // Publish messages
-        pub_bypass_done.publish(obstacle_avoided_msg);
+            // Publish messages
+            pub_bypass_done.publish(obstacle_avoided_msg);
 
-        if (rotation_to_do == 0)
-            pub_goal_to_reach.publish(next_goal);
-        else {
-            std_msgs::Float32 msg_rotation_to_do;
-            msg_rotation_to_do.data = rotation_to_do;
-            pub_rotation_to_do.publish(msg_rotation_to_do);
-        }
+            if (rotation_to_do == 0)
+                pub_goal_to_reach.publish(next_goal);
+            else {
+                std_msgs::Float32 msg_rotation_to_do;
+                msg_rotation_to_do.data = rotation_to_do;
+                pub_rotation_to_do.publish(msg_rotation_to_do);
+            }
 
 #endif
 #ifdef DISPLAY_DEBUG
-        // populate marker with goal_to_reach and target
-        // goal_to_reach is pink and target is blue-greenish
-        nb_pts           = 0;
-        colors[nb_pts].r = 1;
-        colors[nb_pts].g = 0;
-        colors[nb_pts].b = 1;
-        colors[nb_pts].a = 1.0;
-        display[nb_pts]  = next_goal;
-        nb_pts++;
+            // populate marker with goal_to_reach and target
+            // goal_to_reach is pink and target is blue-greenish
+            nb_pts           = 0;
+            colors[nb_pts].r = 1;
+            colors[nb_pts].g = 0;
+            colors[nb_pts].b = 1;
+            colors[nb_pts].a = 1.0;
+            display[nb_pts]  = next_goal;
+            nb_pts++;
 
-        colors[nb_pts].r = 0;
-        colors[nb_pts].g = 1;
-        colors[nb_pts].b = 0;
-        colors[nb_pts].a = 1.0;
-        display[nb_pts]  = target;
-        nb_pts++;
-        populateMarkerTopic();
+            colors[nb_pts].r = 0;
+            colors[nb_pts].g = 1;
+            colors[nb_pts].b = 0;
+            colors[nb_pts].a = 1.0;
+            display[nb_pts]  = target;
+            nb_pts++;
+            populateMarkerTopic();
 #endif
+        }
     }
 
     // Distance between two points
