@@ -40,11 +40,10 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 
 // Parameters for the Artifcial Potential Field bypass algorithm
 // clang-format off
-#define magnitude_scale 10 // scale the magnitude of the force
-#define alpha 100            // attractive force constant
-#define beta 220              // repulsive force constant
+#define k_a 0.5            // attractive force constant
+#define k_r 2              // repulsive force constant
 #define step 1             // step size
-#define target_radius 1  // radius of the target
+#define target_radius 0.5  // radius of the target
 #define p_0 1              // constant for the repulsive force, 
                            // where P(x) is the minimum distance
                            // between the robot and the obstacle
@@ -233,6 +232,7 @@ public:
                   c_location.y, distancePoints(c_location, target));
 
         // Artificial Potential Field algorithm -> multiple obstacles one target
+        // Attractive force
         if (distancePoints(c_location, target) <= target_radius) {
             // We are close enough to the target, we stop the robot and the
             // algorithm APF
@@ -240,53 +240,17 @@ public:
             obstacle_avoided_msg.goal_to_reach    = target;
             pub_bypass_done.publish(obstacle_avoided_msg);
         } else {
-            float d_goal = distancePoints(c_location, target);
-
-            // Total force on x,y axis
-            float total_force_x = 0;
-            float total_force_y = 0;
-
-            // We are not close enough to the target, we compute the attractive force
-            float attractive_force_x = 0;
-            float attractive_force_y = 0;
-
-            if (d_goal > target_radius + magnitude_scale) {
-                if (total_force_x != 0) {
-                    attractive_force_x = (target_radius + magnitude_scale) * (target.x - c_location.x) / d_goal;
-                    attractive_force_y = (target_radius + magnitude_scale) * (target.y - c_location.y) / d_goal;
-                    total_force_x += (attractive_force_x * alpha);
-                    total_force_y += (attractive_force_y * alpha);
-                } else {
-                    attractive_force_x = (target_radius + magnitude_scale) * (target.x - c_location.x) / d_goal;
-                    attractive_force_y = (target_radius + magnitude_scale) * (target.y - c_location.y) / d_goal;
-                    total_force_x      = (attractive_force_x * alpha);
-                    total_force_y      = (attractive_force_y * alpha);
-                }
-            } else {
-                if (total_force_x != 0) {
-                    attractive_force_x = magnitude_scale * (target.x - c_location.x) / d_goal;
-                    attractive_force_y = magnitude_scale * (target.y - c_location.y) / d_goal;
-                    total_force_x += (attractive_force_x * alpha);
-                    total_force_y += (attractive_force_y * alpha);
-                } else {
-                    attractive_force_x = magnitude_scale * (target.x - c_location.x) / d_goal;
-                    attractive_force_y = magnitude_scale * (target.y - c_location.y) / d_goal;
-                    total_force_x      = attractive_force_x * alpha;
-                    total_force_y      = attractive_force_y * alpha;
-                }
-            }
-
             // TODO: print distancePoints(c_location, target)
 
-            // // We are not close enough to the target, we compute the attractive
-            // // force
-            // float attractive_force_x =
-            //     target_radius * k_a * (c_location.x - target.x) / distancePoints(c_location, target);
-            // float attractive_force_y =
-            //     target_radius * k_a * (c_location.y - target.y) / distancePoints(c_location, target);
+            // We are not close enough to the target, we compute the attractive
+            // force
+            float attractive_force_x =
+                target_radius * k_a * (c_location.x - target.x) / distancePoints(c_location, target);
+            float attractive_force_y =
+                target_radius * k_a * (c_location.y - target.y) / distancePoints(c_location, target);
 
-            // total_force_x = attractive_force_x;
-            // total_force_y = attractive_force_y;
+            total_force_x = attractive_force_x;
+            total_force_y = attractive_force_y;
 
             // For each laser beam, we compute the repulsive force
             for (int loop = 0; loop < nb_beams; loop++) {
@@ -314,47 +278,33 @@ public:
                 // Repulsive force
                 float repulsive_force_x = 0;
                 float repulsive_force_y = 0;
-                float theta             = 0;
-                float direction_x       = 0;
-                float direction_y       = 0;
-
-                // Cases for the obstacle
-                if (min_dist_to_object < target_radius || min_dist_to_object > target_radius + magnitude_scale) {
-                    total_force_x += 0;
-                    total_force_y += 0;
-                    if (min_dist_to_object <= 0) {
-                        total_force_x = 0;
-                        total_force_y = 0;
-                    }
-                } else {
-                    repulsive_force_x = magnitude_scale *
-                                        (1 / min_dist_to_object - 1 / (target_radius + magnitude_scale)) *
-                                        (1 / pow(min_dist_to_object, 2)) *
-                                        ((c_location.x - closest_point_object.x) / min_dist_to_object);
-                    repulsive_force_y = magnitude_scale *
-                                        (1 / min_dist_to_object - 1 / (target_radius + magnitude_scale)) *
-                                        (1 / pow(min_dist_to_object, 2)) *
-                                        ((c_location.y - closest_point_object.y) / min_dist_to_object);
-                    theta       = atan2(repulsive_force_y, repulsive_force_x);
-                    direction_x = cos(theta);
-                    direction_y = sin(theta);
-                    total_force_x += (direction_x * (magnitude_scale + target_radius - min_dist_to_object) * beta);
-                    total_force_y += (direction_y * (magnitude_scale + target_radius - min_dist_to_object) * beta);
+                if (min_dist_to_object <= p_0 * 0.5) {
+                    repulsive_force_x = -k_r * ((1 / min_dist_to_object) - (1 / p_0)) *
+                                        ((-closest_point_object.x / distancePoints(c_location, closest_point_object)) /
+                                         pow(min_dist_to_object, 2));
+                    repulsive_force_y = -k_r * ((1 / min_dist_to_object) - (1 / p_0)) *
+                                        ((-closest_point_object.y / distancePoints(c_location, closest_point_object)) /
+                                         pow(min_dist_to_object, 2));
                 }
+
                 // TODO: print distancePoints(c_location, closest_point_object)
                 // TODO: print pow(min_dist_to_object, 2)
 
                 ROS_WARN("min_dist_to_object_1: %f | min_dist_to_object_2: %f \npow(min_dist,2): %f",
                          min_dist_to_object_1, min_dist_to_object_2, pow(min_dist_to_object, 2));
                 ROS_WARN("repulsive_force: (%f, %f)", repulsive_force_x, repulsive_force_y);
+
+                // Compute the total force
+                total_force_x += repulsive_force_x;
+                total_force_y += repulsive_force_y;
             }
 
             ROS_WARN("total_force: (%f, %f)\n times step = (%f, %f)", total_force_x, total_force_y,
                      total_force_x * step, total_force_y * step);
 
             // Compute the goal to reach
-            next_goal.x = c_location.x - (step * total_force_x);
-            next_goal.y = c_location.y - (step * total_force_y);
+            next_goal.x = clamp(c_location.x - (step * total_force_x));
+            next_goal.y = clamp(c_location.y - (step * total_force_y));
 
             // TODO: check if the x axis for the goal to reach is greater in absolute value than the closest obstacle
             // in front, we have to rotate the robot
