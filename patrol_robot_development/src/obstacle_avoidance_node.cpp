@@ -40,16 +40,18 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 
 // Parameters for the Artifcial Potential Field bypass algorithm
 // clang-format off
-#define magnitude_scale 10 // scale the magnitude of the force
-#define alpha 100            // attractive force constant
-#define beta 220              // repulsive force constant
-#define step 1             // step size
-#define target_radius 1  // radius of the target
-#define p_0 1              // constant for the repulsive force, 
-                           // where P(x) is the minimum distance
-                           // between the robot and the obstacle
+#define magnitude_scale 10.0 // scale the magnitude of the force
+#define alpha 100.0          // attractive force constant
+#define beta 220.0           // repulsive force constant
+#define step 1.0             // step size
+#define target_radius 1.0    // radius of the target
+#define p_0 1.0              // constant for the repulsive force, 
+                             // where P(x) is the minimum distance
+                             // between the robot and the obstacle
 // clang-format on
 using namespace std;
+
+bool exit_flag = false;
 
 float clamp(float orientation) {
     while (orientation > M_PI)
@@ -189,7 +191,7 @@ public:
 
         // INFINTE LOOP TO COLLECT LASER DATA AND PROCESS THEM
         ros::Rate r(10);      // this node will run at 10hz
-        while (ros::ok()) {
+        while (ros::ok() && !exit_flag) {
             ros::spinOnce();  // each callback is called once to collect new
                               // data: laser + robot_moving
             update();         // processing of data
@@ -203,13 +205,13 @@ public:
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
     void update() {
         if (!init_laser || !init_laser2 || !init_odom) {
-            ROS_WARN("Waiting for laser and odometry to be running...");
+            ROS_INFO("Waiting for laser and odometry to be running...");
             return;
         }
 
         // In case the decision node has not provided a target, we can exit
         if (target.x == 0 && target.y == 0) {
-            ROS_WARN("Waiting for a target...");
+            ROS_INFO("Waiting for a target...");
             return;
         }
 
@@ -224,13 +226,38 @@ public:
         rotation_to_do = 0;
 
         detect_motion(0);
+        if (isnan(total_force_x) || isnan(total_force_y)) {
+            ROS_ERROR("total force x or y is nan, values: (%f, %f) before all. Values are: \n\td_goal= %f, "
+                      "target_poisiton = (%f, %f)",
+                      total_force_x, total_force_y, distancePoints(c_location, target), target.x, target.y);
+            ROS_BREAK();
+        }
         detect_motion(1);
+        if (isnan(total_force_x) || isnan(total_force_y)) {
+            ROS_ERROR("total force x or y is nan, values: (%f, %f) before cluster. Values are: \n\td_goal= %f, "
+                      "target_poisiton = (%f, %f)",
+                      total_force_x, total_force_y, distancePoints(c_location, target), target.x, target.y);
+            ROS_BREAK();
+        }
         perform_clustering(0);
+        if (isnan(total_force_x) || isnan(total_force_y)) {
+            ROS_ERROR("total force x or y is nan, values: (%f, %f) during cluster. Values are: \n\td_goal= %f, "
+                      "target_poisiton = (%f, %f)",
+                      total_force_x, total_force_y, distancePoints(c_location, target), target.x, target.y);
+            ROS_BREAK();
+        }
         perform_clustering(1);
 
+        if (isnan(total_force_x) || isnan(total_force_y)) {
+            ROS_ERROR("total force x or y is nan, values: (%f, %f) before conditions. Values are: \n\td_goal= %f, "
+                      "target_poisiton = (%f, %f)",
+                      total_force_x, total_force_y, distancePoints(c_location, target), target.x, target.y);
+            ROS_BREAK();
+        }
+
         // Print as error the target, the c_location and the distance between these two
-        ROS_ERROR("Target: (%f, %f)\n C_location: (%f, %f)\n Distance: %f", target.x, target.y, c_location.x,
-                  c_location.y, distancePoints(c_location, target));
+        ROS_INFO("Target: (%f, %f)\n C_location: (%f, %f)\n Distance: %f", target.x, target.y, c_location.x,
+                 c_location.y, distancePoints(c_location, target));
 
         // Artificial Potential Field algorithm -> multiple obstacles one target
         if (distancePoints(c_location, target) <= target_radius) {
@@ -243,12 +270,16 @@ public:
             float d_goal = distancePoints(c_location, target);
 
             // Total force on x,y axis
-            float total_force_x = 0;
-            float total_force_y = 0;
+            total_force_x = 0;
+            total_force_y = 0;
 
             // We are not close enough to the target, we compute the attractive force
             float attractive_force_x = 0;
             float attractive_force_y = 0;
+
+            if (isnan(d_goal) || isnan(target.x) || isnan(target.y)) {
+                ROS_WARN("d_goal or target.x or target.y is nan, values: (%f, %f, %f)", d_goal, target.x, target.y);
+            }
 
             if (d_goal > target_radius + magnitude_scale) {
                 if (total_force_x != 0) {
@@ -276,6 +307,10 @@ public:
                 }
             }
 
+            // if (d_goal <= 0) {
+            //     ROS_WARN("Distance is negative");
+            // }
+
             // TODO: print distancePoints(c_location, target)
 
             // // We are not close enough to the target, we compute the attractive
@@ -288,8 +323,22 @@ public:
             // total_force_x = attractive_force_x;
             // total_force_y = attractive_force_y;
 
+            if (isnan(total_force_x) || isnan(total_force_y)) {
+                ROS_ERROR("total force x or y is nan, values: (%f, %f) before loop. Values are: \n\tattractive_force_x "
+                          "= %f \n\tattractive_force_y = %f \n\td_goal= %f, target_poisiton = (%f, %f)",
+                          total_force_x, total_force_y, attractive_force_x, attractive_force_y, d_goal, target.x,
+                          target.y);
+                ROS_BREAK();
+            }
+
             // For each laser beam, we compute the repulsive force
             for (int loop = 0; loop < nb_beams; loop++) {
+                if (isnan(total_force_x) || isnan(total_force_y)) {
+                    ROS_ERROR("total force x or y is nan, values: (%f, %f) at loop %d", total_force_x, total_force_y,
+                              loop);
+                    ROS_BREAK();
+                }
+
                 int point_cluster_lidar1 = cluster[loop][0];
                 int point_cluster_lidar2 = cluster[loop][1];
                 int cluster_size_lidar1  = cluster_size[point_cluster_lidar1][0];
@@ -311,6 +360,26 @@ public:
                     min_dist_to_object   = min_dist_to_object_2;
                 }
 
+                if (min_dist_to_object_1 <= 0) {
+                    closest_point_object = closest_point_object_2;
+                    min_dist_to_object   = min_dist_to_object_2;
+                } else if (min_dist_to_object_2 <= 0) {
+                    closest_point_object = closest_point_object_1;
+                    min_dist_to_object   = min_dist_to_object_1;
+                }
+
+                // if (fabs(min_dist_to_object - 0) <= 0.0001 || min_dist_to_object <= 0) {
+                //     ROS_ERROR("Closest object in frame has distance 0, Object positions are (%f, %f). -> min_dist is:
+                //     "
+                //               "%f [Obstacle "
+                //               "avoidance node]",
+                //               closest_point_object.x, closest_point_object.y, min_dist_to_object);
+                // }
+
+                if (min_dist_to_object <= 0) {
+                    continue;
+                }
+
                 // Repulsive force
                 float repulsive_force_x = 0;
                 float repulsive_force_y = 0;
@@ -328,28 +397,46 @@ public:
                     }
                 } else {
                     repulsive_force_x = magnitude_scale *
-                                        (1 / min_dist_to_object - 1 / (target_radius + magnitude_scale)) *
+                                        ((1 / min_dist_to_object) - (1 / (target_radius + magnitude_scale))) *
                                         (1 / pow(min_dist_to_object, 2)) *
                                         ((c_location.x - closest_point_object.x) / min_dist_to_object);
                     repulsive_force_y = magnitude_scale *
-                                        (1 / min_dist_to_object - 1 / (target_radius + magnitude_scale)) *
+                                        ((1 / min_dist_to_object) - (1 / (target_radius + magnitude_scale))) *
                                         (1 / pow(min_dist_to_object, 2)) *
                                         ((c_location.y - closest_point_object.y) / min_dist_to_object);
+
                     theta       = atan2(repulsive_force_y, repulsive_force_x);
                     direction_x = cos(theta);
                     direction_y = sin(theta);
+
                     total_force_x += (direction_x * (magnitude_scale + target_radius - min_dist_to_object) * beta);
                     total_force_y += (direction_y * (magnitude_scale + target_radius - min_dist_to_object) * beta);
+
+                    if (isnan(total_force_x) || isnan(total_force_y)) {
+                        ROS_WARN(
+                            "total_force_x or total_force_y is nan, parameters are: \n\tmin_dist_to_object: %f "
+                            "\n\trepulsive_force_x: "
+                            "%f \n\trepulsive_force_y: %f \n\ttheta: %f \n\tdirection_x: %f \n\tdirection_y: %f \n",
+                            min_dist_to_object, repulsive_force_x, repulsive_force_y, theta, direction_x, direction_y);
+
+                        ROS_BREAK();
+                    }
                 }
                 // TODO: print distancePoints(c_location, closest_point_object)
                 // TODO: print pow(min_dist_to_object, 2)
 
-                ROS_WARN("min_dist_to_object_1: %f | min_dist_to_object_2: %f \npow(min_dist,2): %f",
+                ROS_INFO("min_dist_to_object_1: %f | min_dist_to_object_2: %f \npow(min_dist,2): %f",
                          min_dist_to_object_1, min_dist_to_object_2, pow(min_dist_to_object, 2));
-                ROS_WARN("repulsive_force: (%f, %f)", repulsive_force_x, repulsive_force_y);
+                ROS_INFO("repulsive_force: (%f, %f)", repulsive_force_x, repulsive_force_y);
             }
 
-            ROS_WARN("total_force: (%f, %f)\n times step = (%f, %f)", total_force_x, total_force_y,
+            // if (isnan(total_force_x) || isnan(total_force_y) || isnan(next_goal.x) || isnan(next_goal.y)) {
+            //     ROS_ERROR("total_force_x or total_force_y is nan");
+            //     total_force_x = 0;
+            //     total_force_y = 0;
+            // }
+
+            ROS_INFO("total_force: (%f, %f)\n times step = (%f, %f)", total_force_x, total_force_y,
                      total_force_x * step, total_force_y * step);
 
             // Compute the goal to reach
@@ -365,8 +452,6 @@ public:
                 if (next_goal.y < 0) {
                     rotation_to_do = -rotation_to_do;
                 }
-                next_goal.x = 0;
-                next_goal.y = 0;
             }
 
             obstacle_avoided_msg.apf_in_execution = true;
@@ -375,7 +460,12 @@ public:
 #ifdef DISPLAY_DEBUG
 
             if (next_goal.x == 0.0 && next_goal.y == 0.0) {
-                ROS_ERROR("Aruco marker position is (0,0), cannot move to it. [Obstacle avoidance node]");
+                ROS_INFO("Aruco marker position is (0,0), cannot move to it. [Obstacle avoidance node]");
+                return;
+            }
+
+            if (isnan(next_goal.x) || isnan(next_goal.y)) {
+                ROS_INFO("Aruco marker position is NaN, cannot move to it. [Obstacle avoidance node]");
                 return;
             }
 
@@ -432,10 +522,6 @@ public:
                 dynamic[loop][laser] = true;
             } else
                 dynamic[loop][laser] = false;
-
-        // ROS_INFO("%i points are dynamic", nb_pts);
-        // populateMarkerTopic();
-        // getchar();
 
     }  // detect_motion
 
