@@ -4,8 +4,8 @@ if [[ -n "$ROS_MASTER_URI" ]]; then
     echo "Deploying code to robair with IP ($ROS_MASTER_URI)"
     ros_ip_address=$(echo "$ROS_MASTER_URI" | cut -d'/' -f3 | cut -d':' -f1)
     if ping -q -W 5 -c 5 $ros_ip_address >/dev/null; then
-        scp -r $HOME/RobAIR-DEV/RobAIR robair@$ROS_MASTER_URI:~/vinicius-patrol-robot-development/RobAIR
-        ssh -t robair@$ROS_MASTER_URI "sh update_catkin_package.sh && cd $HOME/RobAIR/catkin_ws && catkin_make"
+        scp -r $HOME/RobAIR-DEV/RobAIR robair@$ros_ip_address:~/vinicius-patrol-robot/RobAIR
+        ssh -t robair@$ros_ip_address "sh update_catkin_package.sh && cd $HOME/RobAIR/catkin_ws && catkin_make"
     else
         echo "Not connected to RobAIR network!"
     fi
