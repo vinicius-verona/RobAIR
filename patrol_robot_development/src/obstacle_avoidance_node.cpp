@@ -40,12 +40,12 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 
 // Parameters for the Artifcial Potential Field bypass algorithm
 // clang-format off
-#define magnitude_scale 10.0 // scale the magnitude of the force
-#define alpha 100.0          // attractive force constant
-#define beta 220.0           // repulsive force constant
-#define step 1.0             // step size
-#define target_radius 1.0    // radius of the target
-#define p_0 1.0              // constant for the repulsive force, 
+#define magnitude_scale 2.0 // scale the magnitude of the force
+#define alpha 2.0          // attractive force constant
+#define beta 5.0           // repulsive force constant
+#define step 0.5             // step size
+#define target_radius 0.7    // radius of the target
+#define p_0 0.7              // constant for the repulsive force, 
                              // where P(x) is the minimum distance
                              // between the robot and the obstacle
 // clang-format on
@@ -117,6 +117,7 @@ private:
     geometry_msgs::Point lt_obstacle_point;
     geometry_msgs::Point rt_obstacle_point;
     geometry_msgs::Point target;
+    bool apf_enabled;
 
     bool init_odom;
     geometry_msgs::Point current_position;
@@ -209,8 +210,13 @@ public:
             return;
         }
 
+        if (!apf_enabled) {
+            ROS_INFO("Decision node has not requested APF execution...");
+            return;
+        }
+
         // In case the decision node has not provided a target, we can exit
-        if (target.x == 0 && target.y == 0) {
+        if (target.x <= 0.00001 && target.y <= 0.00001 || isnan(target.x) || isnan(target.y)) {
             ROS_INFO("Waiting for a target...");
             return;
         }
@@ -279,6 +285,7 @@ public:
 
             if (isnan(d_goal) || isnan(target.x) || isnan(target.y)) {
                 ROS_WARN("d_goal or target.x or target.y is nan, values: (%f, %f, %f)", d_goal, target.x, target.y);
+                ROS_BREAK();
             }
 
             if (d_goal > target_radius + magnitude_scale) {
@@ -691,6 +698,7 @@ public:
         lt_obstacle_point    = msg->lt_obstacle_point;
         rt_obstacle_point    = msg->rt_obstacle_point;
         target               = msg->goal_to_reach;
+        apf_enabled          = msg->enable_apf;
     }
 
     void robot_movingCallback(const std_msgs::Bool::ConstPtr &state) {

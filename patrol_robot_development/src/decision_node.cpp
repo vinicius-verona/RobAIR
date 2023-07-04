@@ -88,7 +88,7 @@ private:
     patrol_robot_development::ObstacleAvoidanceMsg bypass_msg;
     geometry_msgs::Point bypass_done_target;
     geometry_msgs::Point target;
-    float apf_in_execution;
+    bool apf_in_execution;
 
     // communication with odom
     ros::Subscriber sub_odometry;
@@ -241,7 +241,6 @@ public:
             previous_state == moving_to_aruco_marker) {
             ROS_WARN("Obstacle close to the robot, applying bypassing algorithm.");
             current_state = bypass_obstacle;
-            // apf_in_execution = true;
 
             // Stop the robot if it is moving
             if (robot_moving) {
@@ -422,7 +421,7 @@ public:
         ROS_INFO("current_state: process_bypass_obstacle");
 
         // if there is no aruco position, skip it
-        if (!apf_in_execution && aruco_position.x == 0 && aruco_position.y == 0) {
+        if (aruco_position.x <= 0.00001 && aruco_position.y <= 0.00001 && target.x <= 0.00001 && target.y <= 0.00001) {
             ROS_ERROR("Aruco marker position is (0,0), there is no reason to bypass obstacle. [Decision node]");
             current_state = searching_aruco_marker;
             return;
@@ -439,6 +438,24 @@ public:
         bypass_msg.lt_obstacle_point = lt_closest_obstacle;
         bypass_msg.rt_obstacle_point = rt_closest_obstacle;
         bypass_msg.target_found      = aruco_position.x == 0 && aruco_position.y == 0 ? false : true;
+        bypass_msg.enable_apf        = true;
+
+        // ROS_WARN("-- Message sent to bypass obstacle -- "
+        //          "\n\tGoal  = (%f, %f)"
+        //          "\n\tFront = (%f, %f)"
+        //          "\n\tLeft  = (%f, %f)"
+        //          "\n\tRight = (%f, %f)"
+        //          "\n\tFound = (%d)"
+        //          "\n\tAruco = (%f, %f)"
+        //          "\n\tAPF   = (%d)"
+        //          "\n\tTarget= (%f, %f)"
+        //          "\n\tBypass= (%f, %f)",
+        //          bypass_msg.goal_to_reach.x, bypass_msg.goal_to_reach.y, bypass_msg.front_obstacle.x,
+        //          bypass_msg.front_obstacle.y, bypass_msg.lt_obstacle_point.x, bypass_msg.lt_obstacle_point.y,
+        //          bypass_msg.rt_obstacle_point.x, bypass_msg.rt_obstacle_point.y, bypass_msg.target_found,
+        //          aruco_position.x, aruco_position.y, apf_in_execution, target.x, target.y, bypass_done_target.x,
+        //          bypass_done_target.y);
+        // ROS_BREAK();
 
         pub_obstacle_avoidance.publish(bypass_msg);
     }
@@ -479,6 +496,12 @@ public:
     void bypass_doneCallback(const patrol_robot_development::ObstacleAvoidedMsg::ConstPtr& obs) {
         bypass_done_target = obs->goal_to_reach;
         apf_in_execution   = obs->apf_in_execution;
+
+        ROS_WARN("--- Bypass done callback - data --- "
+                 "\n\tGoal  = (%f, %f)"
+                 "\n\tAPF   = (%d)",
+                 bypass_done_target.x, bypass_done_target.y, apf_in_execution);
+        ROS_BREAK();
 
         // Done to lock/unlock the current process in bypass_obstacle
         if (!apf_in_execution) {
