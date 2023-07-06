@@ -41,9 +41,9 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 // Parameters for the Artifcial Potential Field bypass algorithm
 // clang-format off
 #define magnitude_scale 2.0 // scale the magnitude of the force
-#define alpha 2.0          // attractive force constant
-#define beta 5.0           // repulsive force constant
-#define step 0.5             // step size
+#define alpha 0.01          // attractive force constant
+#define beta 0.015           // repulsive force constant
+#define step 0.05             // step size
 #define target_radius 0.7    // radius of the target
 #define p_0 0.7              // constant for the repulsive force, 
                              // where P(x) is the minimum distance
@@ -490,16 +490,16 @@ public:
 #endif
 #ifdef DISPLAY_DEBUG
             // populate marker with goal_to_reach and target
-            // goal_to_reach is pink and target is blue-greenish
+            // goal_to_reach is white and target is yellow
             nb_pts           = 0;
             colors[nb_pts].r = 1;
-            colors[nb_pts].g = 0;
+            colors[nb_pts].g = 1;
             colors[nb_pts].b = 1;
             colors[nb_pts].a = 1.0;
             display[nb_pts]  = next_goal;
             nb_pts++;
 
-            colors[nb_pts].r = 0;
+            colors[nb_pts].r = 1;
             colors[nb_pts].g = 1;
             colors[nb_pts].b = 0;
             colors[nb_pts].a = 1.0;
