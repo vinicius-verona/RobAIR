@@ -40,10 +40,13 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 
 // Parameters for the Artifcial Potential Field bypass algorithm
 // clang-format off
-#define magnitude_scale 2.0 // scale the magnitude of the force
-#define alpha 0.01          // attractive force constant
-#define beta 0.015           // repulsive force constant
-#define step 0.05             // step size
+#define magnitude_scale 2.0  // scale the magnitude of the force
+#define alpha_x 0.02         // attractive force constant axis x
+#define alpha_y 0.05         // attractive force constant axis y
+#define beta_x 0.015         // repulsive force constant axis x
+#define beta_y 0.025         // repulsive force constant axis y
+#define step_x 0.05          // step size axis x
+#define step_y 0.1           // step size axis y
 #define target_radius 0.7    // radius of the target
 #define p_0 0.7              // constant for the repulsive force, 
                              // where P(x) is the minimum distance
@@ -292,25 +295,25 @@ public:
                 if (total_force_x != 0) {
                     attractive_force_x = (target_radius + magnitude_scale) * (target.x - c_location.x) / d_goal;
                     attractive_force_y = (target_radius + magnitude_scale) * (target.y - c_location.y) / d_goal;
-                    total_force_x += (attractive_force_x * alpha);
-                    total_force_y += (attractive_force_y * alpha);
+                    total_force_x += (attractive_force_x * alpha_x);
+                    total_force_y += (attractive_force_y * alpha_y);
                 } else {
                     attractive_force_x = (target_radius + magnitude_scale) * (target.x - c_location.x) / d_goal;
                     attractive_force_y = (target_radius + magnitude_scale) * (target.y - c_location.y) / d_goal;
-                    total_force_x      = (attractive_force_x * alpha);
-                    total_force_y      = (attractive_force_y * alpha);
+                    total_force_x      = (attractive_force_x * alpha_x);
+                    total_force_y      = (attractive_force_y * alpha_y);
                 }
             } else {
                 if (total_force_x != 0) {
                     attractive_force_x = magnitude_scale * (target.x - c_location.x) / d_goal;
                     attractive_force_y = magnitude_scale * (target.y - c_location.y) / d_goal;
-                    total_force_x += (attractive_force_x * alpha);
-                    total_force_y += (attractive_force_y * alpha);
+                    total_force_x += (attractive_force_x * alpha_x);
+                    total_force_y += (attractive_force_y * alpha_y);
                 } else {
                     attractive_force_x = magnitude_scale * (target.x - c_location.x) / d_goal;
                     attractive_force_y = magnitude_scale * (target.y - c_location.y) / d_goal;
-                    total_force_x      = attractive_force_x * alpha;
-                    total_force_y      = attractive_force_y * alpha;
+                    total_force_x      = attractive_force_x * alpha_x;
+                    total_force_y      = attractive_force_y * alpha_y;
                 }
             }
 
@@ -416,8 +419,8 @@ public:
                     direction_x = cos(theta);
                     direction_y = sin(theta);
 
-                    total_force_x += (direction_x * (magnitude_scale + target_radius - min_dist_to_object) * beta);
-                    total_force_y += (direction_y * (magnitude_scale + target_radius - min_dist_to_object) * beta);
+                    total_force_x += (direction_x * (magnitude_scale + target_radius - min_dist_to_object) * beta_x);
+                    total_force_y += (direction_y * (magnitude_scale + target_radius - min_dist_to_object) * beta_y);
 
                     if (isnan(total_force_x) || isnan(total_force_y)) {
                         ROS_WARN(
@@ -432,9 +435,9 @@ public:
                 // TODO: print distancePoints(c_location, closest_point_object)
                 // TODO: print pow(min_dist_to_object, 2)
 
-                ROS_INFO("min_dist_to_object_1: %f | min_dist_to_object_2: %f \npow(min_dist,2): %f",
-                         min_dist_to_object_1, min_dist_to_object_2, pow(min_dist_to_object, 2));
-                ROS_INFO("repulsive_force: (%f, %f)", repulsive_force_x, repulsive_force_y);
+                // ROS_INFO("min_dist_to_object_1: %f | min_dist_to_object_2: %f \npow(min_dist,2): %f",
+                //          min_dist_to_object_1, min_dist_to_object_2, pow(min_dist_to_object, 2));
+                // ROS_INFO("repulsive_force: (%f, %f)", repulsive_force_x, repulsive_force_y);
             }
 
             // if (isnan(total_force_x) || isnan(total_force_y) || isnan(next_goal.x) || isnan(next_goal.y)) {
@@ -444,11 +447,11 @@ public:
             // }
 
             ROS_INFO("total_force: (%f, %f)\n times step = (%f, %f)", total_force_x, total_force_y,
-                     total_force_x * step, total_force_y * step);
+                     total_force_x * step_x, total_force_y * step_y);
 
             // Compute the goal to reach
-            next_goal.x = c_location.x - (step * total_force_x);
-            next_goal.y = c_location.y - (step * total_force_y);
+            next_goal.x = c_location.x - (step_x * total_force_x);
+            next_goal.y = c_location.y - (step_y * total_force_y);
 
             // TODO: check if the x axis for the goal to reach is greater in absolute value than the closest obstacle
             // in front, we have to rotate the robot
@@ -567,13 +570,6 @@ public:
                 cluster_middle[current_cluster][laser].z =
                     (current_scan[current_start][laser].z + current_scan[current_end][laser].z) / 2;
 
-                // ROS_INFO("cluster[%i](%f, %f): [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i, %f",
-                //          current_cluster, cluster_middle[current_cluster][laser].x,
-                //          cluster_middle[current_cluster][laser].y, current_start,
-                //          current_scan[current_start][laser].x, current_scan[current_start][laser].y, current_end,
-                //          current_scan[current_end][laser].x, current_scan[current_end][laser].y,
-                //          cluster_size[current_cluster][laser], nb_dynamic, cluster_dynamic[current_cluster][laser]);
-
                 nb_dynamic = 0;
                 nb_cluster[laser]++;
                 current_cluster++;
@@ -612,12 +608,6 @@ public:
             (current_scan[current_start][laser].y + current_scan[current_end][laser].y) / 2;
         cluster_middle[current_cluster][laser].z =
             (current_scan[current_start][laser].z + current_scan[current_end][laser].z) / 2;
-
-        // ROS_INFO("cluster[%i](%f, %f): [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i, %f", current_cluster,
-        //          cluster_middle[current_cluster][laser].x, cluster_middle[current_cluster][laser].y, current_start,
-        //          current_scan[current_start][laser].x, current_scan[current_start][laser].y, current_end,
-        //          current_scan[current_end][laser].x, current_scan[current_end][laser].y,
-        //          cluster_size[current_cluster][laser], nb_dynamic, cluster_dynamic[current_cluster][laser]);
 
         nb_cluster[laser]++;
 
