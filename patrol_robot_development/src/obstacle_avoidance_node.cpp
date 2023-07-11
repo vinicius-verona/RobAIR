@@ -41,8 +41,8 @@ float robair_size = 0.6;  // 0.35 for small robair, 0.75 for philip's robair
 // Parameters for the Artifcial Potential Field bypass algorithm
 // clang-format off
 #define magnitude_scale 2.0  // scale the magnitude of the force
-#define alpha_x 0.02         // attractive force constant axis x
-#define alpha_y 0.05         // attractive force constant axis y
+#define alpha_x 0.05         // attractive force constant axis x
+#define alpha_y 0.15         // attractive force constant axis y
 #define beta_x 0.015         // repulsive force constant axis x
 #define beta_y 0.025         // repulsive force constant axis y
 #define step_x 0.05          // step size axis x
@@ -66,6 +66,10 @@ float clamp(float orientation) {
     return orientation;
 }
 
+#define calculate_potential_field 0
+#define rotate_to_point 1
+#define move_to_point 2
+
 // Transofrm the position of the base in the cartesian local frame of robot
 // Input: base_position: position of the base in the map frame
 //        current_position: position of the robot in the map frame
@@ -84,6 +88,10 @@ geometry_msgs::Point transformPoint(geometry_msgs::Point &base, geometry_msgs::P
 class obstacle_avoidance {
 private:
     ros::NodeHandle n;
+    int current_state;
+
+    geometry_msgs::Point next_goal;
+    geometry_msgs::Point c_location;
 
     // communication with laser_scanner
     ros::Subscriber sub_scan;
@@ -190,8 +198,9 @@ public:
         transform_laser.y = 0;
         transform_laser.z = 1.2;
 
-        target.x = 0;
-        target.y = 0;
+        target.x      = 0;
+        target.y      = 0;
+        current_state = 0;
 
         // INFINTE LOOP TO COLLECT LASER DATA AND PROCESS THEM
         ros::Rate r(10);      // this node will run at 10hz
@@ -224,15 +233,52 @@ public:
             return;
         }
 
+        // #ifdef DISPLAY_DEBUG
+
+        if (next_goal.x == 0.0 && next_goal.y == 0.0) {
+            ROS_INFO("Aruco marker position is (0,0), cannot move to it. [Obstacle avoidance node]");
+            return;
+        }
+
+        if (isnan(next_goal.x) || isnan(next_goal.y)) {
+            ROS_INFO("Aruco marker position is NaN, cannot move to it. [Obstacle avoidance node]");
+            return;
+        }
+
+        // Instead of publishing  like this.. create sort of a decision/process message publishing style.
+        // Only publish next_goal if rotation_to_do is 0 or in the state of translation
+        // else we saty in the state of rotation only publihsing rotation to do. (Similar to decision node of
+        // welcome).
+
+        if (current_state == calculate_potential_field)
+            process_calculate_potential_field();
+        else if (current_state == rotate_to_point)
+            process_rotate_to_point();
+        else
+            process_move_to_point();
+
+        // Publish messages
+        // pub_bypass_done.publish(obstacle_avoided_msg);
+
+        // if (rotation_to_do == 0)
+        //     pub_goal_to_reach.publish(next_goal);
+        // else {
+        //     std_msgs::Float32 msg_rotation_to_do;
+        //     msg_rotation_to_do.data = rotation_to_do;
+        //     pub_rotation_to_do.publish(msg_rotation_to_do);
+        // }
+
+        // #endif
+    }
+
+    void process_calculate_potential_field() {
         float total_force_x = 0;
         float total_force_y = 0;
-        geometry_msgs::Point next_goal;
-        geometry_msgs::Point c_location;
-        c_location.x   = 0;
-        c_location.y   = 0;
-        next_goal.x    = 0;
-        next_goal.y    = 0;
-        rotation_to_do = 0;
+        c_location.x        = 0;
+        c_location.y        = 0;
+        next_goal.x         = 0;
+        next_goal.y         = 0;
+        rotation_to_do      = 0;
 
         detect_motion(0);
         if (isnan(total_force_x) || isnan(total_force_y)) {
@@ -450,14 +496,16 @@ public:
                      total_force_x * step_x, total_force_y * step_y);
 
             // Compute the goal to reach
-            next_goal.x = c_location.x - (step_x * total_force_x);
-            next_goal.y = c_location.y - (step_y * total_force_y);
+            next_goal.x = c_location.x + (step_x * total_force_x);
+            next_goal.y = c_location.y + (step_y * total_force_y);
 
             // TODO: check if the x axis for the goal to reach is greater in absolute value than the closest obstacle
             // in front, we have to rotate the robot
 
+            // For the following blocks of code.. check if translation to next_goal é > 0
+            // If it is not, rotation_to_do is 0
             // If the new x coordinate is negative, we just rotate to face the point.
-            if (next_goal.x < 0) {
+            if (distancePoints(next_goal, c_location) > 0) {
                 rotation_to_do = acos(next_goal.x / distancePoints(c_location, next_goal));
                 if (next_goal.y < 0) {
                     rotation_to_do = -rotation_to_do;
@@ -466,51 +514,50 @@ public:
 
             obstacle_avoided_msg.apf_in_execution = true;
             obstacle_avoided_msg.goal_to_reach    = next_goal;
-
-#ifdef DISPLAY_DEBUG
-
-            if (next_goal.x == 0.0 && next_goal.y == 0.0) {
-                ROS_INFO("Aruco marker position is (0,0), cannot move to it. [Obstacle avoidance node]");
-                return;
-            }
-
-            if (isnan(next_goal.x) || isnan(next_goal.y)) {
-                ROS_INFO("Aruco marker position is NaN, cannot move to it. [Obstacle avoidance node]");
-                return;
-            }
-
-            // Publish messages
-            pub_bypass_done.publish(obstacle_avoided_msg);
-
-            if (rotation_to_do == 0)
-                pub_goal_to_reach.publish(next_goal);
-            else {
-                std_msgs::Float32 msg_rotation_to_do;
-                msg_rotation_to_do.data = rotation_to_do;
-                pub_rotation_to_do.publish(msg_rotation_to_do);
-            }
-
-#endif
-#ifdef DISPLAY_DEBUG
-            // populate marker with goal_to_reach and target
-            // goal_to_reach is white and target is yellow
-            nb_pts           = 0;
-            colors[nb_pts].r = 1;
-            colors[nb_pts].g = 1;
-            colors[nb_pts].b = 1;
-            colors[nb_pts].a = 1.0;
-            display[nb_pts]  = next_goal;
-            nb_pts++;
-
-            colors[nb_pts].r = 1;
-            colors[nb_pts].g = 1;
-            colors[nb_pts].b = 0;
-            colors[nb_pts].a = 1.0;
-            display[nb_pts]  = target;
-            nb_pts++;
-            populateMarkerTopic();
-#endif
         }
+
+#ifdef DISPLAY_DEBUG
+        // populate marker with goal_to_reach and target
+        // goal_to_reach is white and target is yellow
+        nb_pts           = 0;
+        colors[nb_pts].r = 1;
+        colors[nb_pts].g = 1;
+        colors[nb_pts].b = 1;
+        colors[nb_pts].a = 1.0;
+        display[nb_pts]  = next_goal;
+        nb_pts++;
+
+        colors[nb_pts].r = 1;
+        colors[nb_pts].g = 1;
+        colors[nb_pts].b = 0;
+        colors[nb_pts].a = 1.0;
+        display[nb_pts]  = target;
+        nb_pts++;
+        populateMarkerTopic();
+#endif
+
+        current_state = rotate_to_point;
+    }
+
+    void process_rotate_to_point() {
+        if (rotation_to_do < M_PI / 18) {  // 10 degrees
+            current_state = move_to_point;
+            return;
+        }
+
+        std_msgs::Float32 msg_rotation_to_do;
+        msg_rotation_to_do.data = rotation_to_do;
+        pub_rotation_to_do.publish(msg_rotation_to_do);
+    }
+
+    void process_move_to_point() {
+        if (next_goal.x != 0 || next_goal.y != 0) {
+            pub_goal_to_reach.publish(next_goal);
+        }
+
+        // Publish messages
+        pub_bypass_done.publish(obstacle_avoided_msg);
+        current_state = calculate_potential_field;
     }
 
     // Distance between two points

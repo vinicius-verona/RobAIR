@@ -290,7 +290,9 @@ public:
                     frequency = 0;
                 } else {
                     // When we see an aruco, we go towards it
-                    current_state = moving_to_aruco_marker;
+                    current_state           = moving_to_aruco_marker;
+                    msg_rotation_to_do.data = 0;
+                    pub_rotation_to_do.publish(msg_rotation_to_do);
                 }
             }
         } else {
