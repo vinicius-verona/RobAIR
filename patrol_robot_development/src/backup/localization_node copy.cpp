@@ -20,9 +20,10 @@
 
 using namespace std;
 
-#define distance_resolution 0.05                                 /* in meters */
-#define angle_resolution_degrees 5                               /* in degrees */
-#define angle_resolution (angle_resolution_degrees * M_PI / 180) /* in radians */
+#define distance_resolution 0.05            /* in meters */
+#define angle_resolution_degrees 5          /* in degrees */
+#define angle_resolution \
+    (angle_resolution_degrees * M_PI / 180) /* in radians */
 #define distance_to_travel 0.5
 #define angle_to_travel 10
 
@@ -88,21 +89,25 @@ private:
     // performing localization periodically if static
     bool moved_since_localization;  // true if the robot has moved since last
                                     // localization
-    int ticks_since_update;         // how long since last (localization && movement)
+    int ticks_since_update;  // how long since last (localization && movement)
 
 public:
     localization_node() {
-        sub_scan     = n.subscribe("scan", 1, &localization_node::scanCallback, this);
-        sub_odometry = n.subscribe("odom", 1, &localization_node::odomCallback, this);
+        sub_scan =
+            n.subscribe("scan", 1, &localization_node::scanCallback, this);
+        sub_odometry =
+            n.subscribe("odom", 1, &localization_node::odomCallback, this);
         pub_localization_complete_marker =
-            n.advertise<visualization_msgs::Marker>("localization_complete_marker",
-                                                    1);  // Preparing a topic to publish our results. This will be
-                                                         // used by the visualization tool rviz
-        pub_localization =
-            n.advertise<geometry_msgs::Point>("localization",
-                                              1);  // Preparing a topic to publish the position of the person
+            n.advertise<visualization_msgs::Marker>(
+                "localization_complete_marker",
+                1);  // Preparing a topic to publish our results. This will be
+                     // used by the visualization tool rviz
+        pub_localization = n.advertise<geometry_msgs::Point>(
+            "localization",
+            1);  // Preparing a topic to publish the position of the person
 
-        sub_position = n.subscribe("initialpose", 1, &localization_node::positionCallback, this);
+        sub_position = n.subscribe("initialpose", 1,
+                                   &localization_node::positionCallback, this);
 
         // get map via RPC
         nav_msgs::GetMap::Request req;
@@ -129,7 +134,8 @@ public:
         max.y      = min.y + height_max * cell_size;
 
         ROS_INFO("map loaded");
-        ROS_INFO("Map: (%f, %f) -> (%f, %f) with size: %f", min.x, min.y, max.x, max.y, cell_size);
+        ROS_INFO("Map: (%f, %f) -> (%f, %f) with size: %f", min.x, min.y, max.x,
+                 max.y, cell_size);
         ROS_INFO("wait for initial pose");
 
         // INFINTE LOOP TO COLLECT LASER DATA AND PROCESS THEM
@@ -137,8 +143,8 @@ public:
         while (ros::ok()) {
             ros::spinOnce();  // each callback is called once
             update();
-            r.sleep();        // we wait if the processing (ie, callback+update) has
-                              // taken less than 0.1s (ie, 10 hz)
+            r.sleep();  // we wait if the processing (ie, callback+update) has
+                        // taken less than 0.1s (ie, 10 hz)
         }
     }
 
@@ -155,25 +161,29 @@ public:
             previous_angle_traveled    = angle_traveled;
 
             distance_traveled = distancePoints(odom_current, odom_last);
-            angle_traveled    = odom_current_orientation - odom_last_orientation;
+            angle_traveled = odom_current_orientation - odom_last_orientation;
             if (angle_traveled < -M_PI)
                 angle_traveled += 2 * M_PI;
             if (angle_traveled > M_PI)
                 angle_traveled -= 2 * M_PI;
 
-            if ((distance_traveled != previous_distance_traveled) || (angle_traveled != previous_angle_traveled))
+            if ((distance_traveled != previous_distance_traveled) ||
+                (angle_traveled != previous_angle_traveled))
                 ROS_INFO("distance_traveled = %f, angle_traveled = %f since "
                          "last localization",
                          distance_traveled, angle_traveled * 180 / M_PI);
 
             bool update_odom_threshold =
-                (distance_traveled > distance_to_travel) || (fabs(angle_traveled * 180 / M_PI) > angle_to_travel);
+                (distance_traveled > distance_to_travel) ||
+                (fabs(angle_traveled * 180 / M_PI) > angle_to_travel);
             if (moved_since_localization) {
                 ticks_since_update++;
             }
 
-            if (update_odom_threshold || (ticks_since_update >= ticks_until_update)) {
-                ROS_INFO("Localize (%s)", update_odom_threshold ? "odom" : "periodic");
+            if (update_odom_threshold ||
+                (ticks_since_update >= ticks_until_update)) {
+                ROS_INFO("Localize (%s)",
+                         update_odom_threshold ? "odom" : "periodic");
                 predict_position();
                 estimate_position();
                 ticks_since_update       = 0;
@@ -186,9 +196,11 @@ public:
     void initialize_localization() {
         ROS_INFO("initialize localization");
 
-        int score_max = sensor_model(initial_position.x, initial_position.y, initial_orientation);
-        ROS_INFO("initial_position(%f, %f, %f): score = %i", initial_position.x, initial_position.y,
-                 initial_orientation * 180 / M_PI, score_max);
+        int score_max = sensor_model(initial_position.x, initial_position.y,
+                                     initial_orientation);
+        ROS_INFO("initial_position(%f, %f, %f): score = %i", initial_position.x,
+                 initial_position.y, initial_orientation * 180 / M_PI,
+                 score_max);
         populateMarkerTopic();
         // ROS_INFO("press enter to continue");
         // getchar();
@@ -202,8 +214,9 @@ public:
         // we search the position with the highest sensor_model in a square of
         // 2x2 meters around the initial_position and with all possible
         // orientations
-        ROS_INFO("possible positions to tests: (%f, %f, %f) -> (%f, %f, %f)", min_x, min_y,
-                 min_orientation * 180 / M_PI, max_x, max_y, max_orientation * 180 / M_PI);
+        ROS_INFO("possible positions to tests: (%f, %f, %f) -> (%f, %f, %f)",
+                 min_x, min_y, min_orientation * 180 / M_PI, max_x, max_y,
+                 max_orientation * 180 / M_PI);
 
         min_x           = initial_position.x - radius_square;
         max_x           = initial_position.x + radius_square;
@@ -211,10 +224,14 @@ public:
         max_y           = initial_position.y + radius_square;
         min_orientation = 0;
         max_orientation = 360 * M_PI / 180;
-        for (float loop_x = min_x; loop_x <= max_x; loop_x += distance_resolution) {
-            for (float loop_y = min_y; loop_y <= max_y; loop_y += distance_resolution) {
-                for (float o = min_orientation; o <= max_orientation; o += angle_resolution) {
-                    if (cell_value(loop_x, loop_y) == 0)  // robair can only be at a free cell
+        for (float loop_x = min_x; loop_x <= max_x;
+             loop_x += distance_resolution) {
+            for (float loop_y = min_y; loop_y <= max_y;
+                 loop_y += distance_resolution) {
+                for (float o = min_orientation; o <= max_orientation;
+                     o += angle_resolution) {
+                    if (cell_value(loop_x, loop_y) ==
+                        0)  // robair can only be at a free cell
                     {
                         int score_current = sensor_model(loop_x, loop_y, o);
                         // ROS_INFO("(%f, %f, %f): score = %i", loop_x, loop_y,
@@ -237,13 +254,15 @@ public:
             }
         }
 
-        sensor_model(estimated_position.x, estimated_position.y, estimated_orientation);
+        sensor_model(estimated_position.x, estimated_position.y,
+                     estimated_orientation);
         populateMarkerTopic();
         estimated_position.z = estimated_orientation;
         pub_localization.publish(estimated_position);
 
-        ROS_INFO("(%f, %f, %f): MAX score = %i", estimated_position.x, estimated_position.y,
-                 estimated_orientation * 180 / M_PI, score_max);
+        ROS_INFO("(%f, %f, %f): MAX score = %i", estimated_position.x,
+                 estimated_position.y, estimated_orientation * 180 / M_PI,
+                 score_max);
         ROS_INFO("initialize localization done");
 
     }  // initialize_localization
@@ -263,8 +282,10 @@ public:
         if (predicted_orientation > M_PI)
             predicted_orientation -= 2 * M_PI;
 
-        predicted_position.x = estimated_position.x + distance_traveled * cos(predicted_orientation);
-        predicted_position.y = estimated_position.y + distance_traveled * sin(predicted_orientation);
+        predicted_position.x = estimated_position.x +
+                               distance_traveled * cos(predicted_orientation);
+        predicted_position.y = estimated_position.y +
+                               distance_traveled * sin(predicted_orientation);
 
         ROS_INFO("predict_position done");
     }
@@ -275,8 +296,10 @@ public:
         ROS_INFO("estimate_position");
 
         // initialization of score_max with the predicted_position
-        int score_max = sensor_model(predicted_position.x, predicted_position.y, predicted_orientation);
-        ROS_INFO("predicted position(%f, %f, %f): score = %i", predicted_position.x, predicted_position.y,
+        int score_max = sensor_model(predicted_position.x, predicted_position.y,
+                                     predicted_orientation);
+        ROS_INFO("predicted position(%f, %f, %f): score = %i",
+                 predicted_position.x, predicted_position.y,
                  predicted_orientation * 180 / M_PI, score_max);
         populateMarkerTopic();
         // ROS_INFO("press enter to continue");
@@ -287,8 +310,9 @@ public:
         // we search the position with the highest sensor_model in a square of
         // 1x1 meter around the predicted_position and with orientations around
         // the predicted_orientation -M_PI/6 and +M_PI/6
-        ROS_INFO("possible positions to tests: (%f, %f, %f) -> (%f, %f, %f)", min_x, min_y,
-                 min_orientation * 180 / M_PI, max_x, max_y, max_orientation * 180 / M_PI);
+        ROS_INFO("possible positions to tests: (%f, %f, %f) -> (%f, %f, %f)",
+                 min_x, min_y, min_orientation * 180 / M_PI, max_x, max_y,
+                 max_orientation * 180 / M_PI);
 
         float radius_square = 0.5;
 
@@ -298,10 +322,14 @@ public:
         max_y           = predicted_position.y + radius_square;
         min_orientation = predicted_orientation - M_PI / 6;
         max_orientation = predicted_orientation + M_PI / 6;
-        for (float loop_x = min_x; loop_x <= max_x; loop_x += distance_resolution) {
-            for (float loop_y = min_y; loop_y <= max_y; loop_y += distance_resolution) {
-                for (float o = min_orientation; o <= max_orientation; o += angle_resolution) {
-                    if (cell_value(loop_x, loop_y) == 0)  // robair can only be at a free cell
+        for (float loop_x = min_x; loop_x <= max_x;
+             loop_x += distance_resolution) {
+            for (float loop_y = min_y; loop_y <= max_y;
+                 loop_y += distance_resolution) {
+                for (float o = min_orientation; o <= max_orientation;
+                     o += angle_resolution) {
+                    if (cell_value(loop_x, loop_y) ==
+                        0)  // robair can only be at a free cell
                     {
                         int score_current = sensor_model(loop_x, loop_y, o);
                         // ROS_INFO("(%f, %f, %f): score = %i", loop_x, loop_y,
@@ -323,13 +351,15 @@ public:
             }
         }
 
-        sensor_model(estimated_position.x, estimated_position.y, estimated_orientation);
+        sensor_model(estimated_position.x, estimated_position.y,
+                     estimated_orientation);
         populateMarkerTopic();
         estimated_position.z = estimated_orientation;
         pub_localization.publish(estimated_position);
 
-        ROS_INFO("(%f, %f, %f): MAX score = %i", estimated_position.x, estimated_position.y,
-                 estimated_orientation * 180 / M_PI, score_max);
+        ROS_INFO("(%f, %f, %f): MAX score = %i", estimated_position.x,
+                 estimated_position.y, estimated_orientation * 180 / M_PI,
+                 score_max);
         ROS_INFO("estimate_position done");
     }
 
@@ -379,11 +409,14 @@ public:
             bool cell_occupied = false;
             // loop over the positions surronding the current hit of the laser
             // and test if one of this cell is occupied
-            for (float loop_x = hit.x - uncertainty; loop_x <= hit.x + uncertainty; loop_x += uncertainty) {
-                for (float loop_y = hit.y - uncertainty; loop_y <= hit.y + uncertainty; loop_y += uncertainty) {
+            for (float loop_x = hit.x - uncertainty;
+                 loop_x <= hit.x + uncertainty; loop_x += uncertainty) {
+                for (float loop_y = hit.y - uncertainty;
+                     loop_y <= hit.y + uncertainty; loop_y += uncertainty) {
                     // test if the current hit of the laser corresponds to an
                     // occupied cell
-                    cell_occupied = cell_occupied || (cell_value(loop_x, loop_y) == 100);
+                    cell_occupied =
+                        cell_occupied || (cell_value(loop_x, loop_y) == 100);
                 }
             }
 
@@ -444,7 +477,8 @@ public:
         // hit
         float beam_angle = angle_min;
         for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
-            if ((scan->ranges[loop] < range_max) && (scan->ranges[loop] > range_min))
+            if ((scan->ranges[loop] < range_max) &&
+                (scan->ranges[loop] > range_min))
                 r[loop] = scan->ranges[loop];
             else
                 r[loop] = range_max;
@@ -462,7 +496,8 @@ public:
         init_odom = true;
 
         // if moved, save flag
-        if (odom_current.x != o->pose.pose.position.x || odom_current.y != o->pose.pose.position.y ||
+        if (odom_current.x != o->pose.pose.position.x ||
+            odom_current.y != o->pose.pose.position.y ||
             odom_current_orientation != tf::getYaw(o->pose.pose.orientation)) {
             moved_since_localization = true;
         }
@@ -473,7 +508,8 @@ public:
 
     }  // odomCallback
 
-    void positionCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &p) {
+    void positionCallback(
+        const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &p) {
         init_position       = true;
         initial_position.x  = p->pose.pose.position.x;
         initial_position.y  = p->pose.pose.position.y;

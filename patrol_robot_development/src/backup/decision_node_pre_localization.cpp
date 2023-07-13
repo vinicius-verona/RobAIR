@@ -17,16 +17,6 @@
 #include "std_msgs/String.h"
 #include "visualization_msgs/Marker.h"
 
-/**
- * TODO:
- * 1 - Create static points in the map to be used as reference for the robot (vertices in the graph)
- * 2 - Create a graph with the points in the map
- * 3 - Create a function to calculate the shortest path between two points in the graph (BFS)
- * 4 - Create a function to find the two vertices surrounding the robot and the target
- * 5 - Create a function to find the path between the robot and target. Starting in the target, go in
- *     reverse order until one of the vertices is one of both surrounding the robot.
- */
-
 // Display goal_to_reach marker from avoid_lateral_crash
 // #define DISPLAY_DEBUG 1
 
@@ -74,7 +64,6 @@ private:
 
     // DEBUG
     ros::Publisher pub_goal_marker;
-    ros::Publisher pub_localization_marker;
 
     // communication with robot_moving_node
     ros::Subscriber sub_robot_moving;
@@ -92,12 +81,6 @@ private:
     bool init_lateral_obstacles;
     float lt_obstacle_distance;
     float rt_obstacle_distance;
-
-    // Communication with localization
-    ros::Subscriber sub_localization;
-    bool new_localization;
-    bool init_localization;
-    geometry_msgs::Point localization;
 
     // Communication with obstacle_avoidance
     ros::Subscriber sub_obstacle_avoidance;
@@ -157,9 +140,6 @@ public:
         // Communication with robot_moving_node
         sub_robot_moving = n.subscribe("robot_moving", 1, &decision_node::robot_movingCallback, this);
 
-        // Communication with localization_node
-        sub_localization = n.subscribe("localization_node", 1, &decision_node::localizationCallback, this);
-
         // Communication with aruco_node
         sub_aruco_position = n.subscribe("robair_goal", 1, &decision_node::aruco_positionCallback, this);
 
@@ -176,8 +156,7 @@ public:
         pub_change_odom = n.advertise<geometry_msgs::Point>("change_odometry", 1);
 
         // DEBUG
-        pub_goal_marker         = n.advertise<visualization_msgs::Marker>("goal_to_reach_marker", 1);
-        pub_localization_marker = n.advertise<visualization_msgs::Marker>("localization_marker", 1);
+        pub_goal_marker = n.advertise<visualization_msgs::Marker>("goal_to_reach_marker", 1);
 
         current_state  = searching_aruco_marker;
         previous_state = -1;
@@ -218,16 +197,15 @@ public:
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
     void update() {
         // init_localization = true;
-        if (init_odom && init_obstacle && init_lateral_obstacles && init_localization) {
+        if (init_odom && init_obstacle && init_lateral_obstacles) {
             update_variables();
-
-            // Based on the current localization, face aruco marker if close enough or go to the closest aruco marker
-            // the aruco marker positions should be kept as an array here in decision node
 
             if (current_state == searching_aruco_marker && apf_in_execution == false)
                 process_searching_aruco_marker();
             else if (current_state == moving_to_aruco_marker && apf_in_execution == false)
                 process_moving_to_aruco_marker();
+            // else if (current_state == avoiding_lateral_crash)
+            //     process_avoid_lateral_crash();
             else
                 process_bypass_obstacle();
 
@@ -237,8 +215,8 @@ public:
 
         } else
             ROS_WARN("Initialize odometry, obstacle detection, lateral "
-                     "distances, localization and obstacle avoidance"
-                     "before starting decision node.");
+                     "distances and obstacle avoidance before starting "
+                     "decision node.");
 
     }  // update
 
@@ -257,9 +235,6 @@ public:
         //     current_state = avoiding_lateral_crash;
         // }
 
-        // Show localization in map frame in rviz using marker
-        display_location();
-
         // If the robot finds an obstacle in the way between target and current
         // position apply an algorithm (APF), for example, to bypass it
         if (closest_obstacle.x <= obstacle_safety_threshold && closest_obstacle.y <= obstacle_safety_threshold &&
@@ -277,22 +252,6 @@ public:
             }
         }
     }  // update_variables
-
-    void display_location() {
-        // Display in RVIZ the current location of the robot
-        // current_location in rviz is pink
-        nb_pts            = 0;
-        colors[nb_pts].r  = 1;
-        colors[nb_pts].g  = 0;
-        colors[nb_pts].b  = 0.4;
-        colors[nb_pts].a  = 1.0;
-        display[nb_pts].x = localization.x;
-        display[nb_pts].y = localization.y;
-        display[nb_pts].z = 0;
-        nb_pts++;
-
-        populateMarkerTopic();
-    }
 
     // Patrol robot - processes
     void process_searching_aruco_marker() {
@@ -444,18 +403,18 @@ public:
         msg_goal_to_reach = middle_point;
         pub_goal_to_reach.publish(msg_goal_to_reach);
 
-        /* Display in RVIZ the point where the robair is supposed to go */
-        // goal_to_reach in rviz is white
-        // #ifdef DISPLAY_DEBUG
-        //         nb_pts           = 0;
-        //         colors[nb_pts].r = 1;
-        //         colors[nb_pts].g = 1;
-        //         colors[nb_pts].b = 1;
-        //         colors[nb_pts].a = 1.0;
-        //         display[nb_pts]  = middle_point;
-        //         nb_pts++;
-        //         populateMarkerTopic();
-        // #endif
+/* Display in RVIZ the point where the robair is supposed to go */
+// goal_to_reach in rviz is white
+#ifdef DISPLAY_DEBUG
+        nb_pts           = 0;
+        colors[nb_pts].r = 1;
+        colors[nb_pts].g = 1;
+        colors[nb_pts].b = 1;
+        colors[nb_pts].a = 1.0;
+        display[nb_pts]  = middle_point;
+        nb_pts++;
+        populateMarkerTopic();
+#endif
         current_state = searching_aruco_marker;
 
     }  // process_avoid_lateral_crash
@@ -554,20 +513,6 @@ public:
         }
     }  // bypass_doneCallback
 
-    void localizationCallback(const geometry_msgs::Point::ConstPtr& l) {
-        // set initial base position on startup
-        if (base_position.x == 0 && base_position.y == 0) {
-            base_position.x  = l->x;
-            base_position.y  = l->y;
-            base_orientation = clamp(l->z);
-        }
-
-        new_localization    = true;
-        init_localization   = true;
-        localization        = *l;
-        current_orientation = clamp(l->z);
-    }
-
     // Distance between two points
     float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {
         return sqrt(pow((pa.x - pb.x), 2.0) + pow((pa.y - pb.y), 2.0));
@@ -581,7 +526,7 @@ public:
     void populateMarkerReference() {
         visualization_msgs::Marker references;
 
-        references.header.frame_id    = "map";  //"laser";
+        references.header.frame_id    = "laser";
         references.header.stamp       = ros::Time::now();
         references.ns                 = "example";
         references.id                 = 1;
@@ -626,14 +571,13 @@ public:
         v.z = 0.0;
         references.points.push_back(v);
 
-        // pub_goal_marker.publish(references);
-        pub_localization_marker.publish(references);
+        pub_goal_marker.publish(references);
     }
 
     void populateMarkerTopic() {
         visualization_msgs::Marker marker;
 
-        marker.header.frame_id = "map";  //"laser";
+        marker.header.frame_id = "laser";
         marker.header.stamp    = ros::Time::now();
         marker.ns              = "example";
         marker.id              = 0;
@@ -667,8 +611,7 @@ public:
             marker.colors.push_back(c);
         }
 
-        // pub_goal_marker.publish(marker);
-        pub_localization_marker.publish(marker);
+        pub_goal_marker.publish(marker);
         populateMarkerReference();
     }
 };

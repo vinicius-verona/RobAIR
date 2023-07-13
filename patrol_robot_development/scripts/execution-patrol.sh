@@ -33,11 +33,11 @@ function get_last_window_id() {
 }
 
 # Calculate screen width and height
-screen_width=$(xdpyinfo | awk '/dimensions/{print $2}' | cut -d 'x' -f 1)
+screen_width=$(xdpyinfo  | awk '/dimensions/{print $2}' | cut -d 'x' -f 1)
 screen_height=$(xdpyinfo | awk '/dimensions/{print $2}' | cut -d 'x' -f 2)
 
 # Calculate window width and height
-window_width=$((screen_width / 2))
+window_width=$((screen_width   / 2))
 window_height=$((screen_height / 2))
 
 
@@ -47,7 +47,7 @@ if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
     # move_to_workspace $wid 1
     # set_window_position $wid 0 0 $window_width "$(($window_height * 2))" "Roslaunch"
 
-    open_terminal "rosrun robair_detection_navigation robair_webcam_one.py"
+    open_terminal "rosrun robair_detection_navigation robair_webcam_one_newer_opencv.py"
     wid=$(get_last_window_id)
     move_to_workspace $wid 1
     set_window_position $wid $window_width 0 $window_width "$(($window_height * 2))" "Rosrun Webcam"
