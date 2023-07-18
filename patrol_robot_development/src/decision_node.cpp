@@ -8,6 +8,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <string>
 
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/Quaternion.h"
@@ -17,6 +18,8 @@
 #include "std_msgs/Float32.h"
 #include "std_msgs/String.h"
 #include "visualization_msgs/Marker.h"
+
+using namespace std;
 
 /**
  * TODO:
@@ -47,6 +50,7 @@
 #define obstacle_safety_threshold 1
 
 #define DEBUG_GETCHAR_ENABLED 0
+#define STATIC_TESTING_BFS 1
 
 // Philip Plateau Test
 #define base_position_x 0
@@ -139,15 +143,15 @@ private:
 
     int number_of_end_points;
     geometry_msgs::Point end_points_positions[1000];  // Act as vertices in the graph
-    int robot_surrounding_points[2];
-    int target_surrounding_points[2];
-    list<geometry_msg::Point> path_points[1000];
-    geomtry_msg::Point connection[1000][1000];  // Act as edges in the graph
+    int robot_surrounding_points_id[2];
+    int target_surrounding_points_id[2];
+    list<geometry_msgs::Point> path_points;
+    int connection[1000][1000];          // Act as edges in the graph
     int vertex_connection_degree[1000];  // If a vertex has connection with 3 other vertices then its degree is 3 and we
                                          // use connection [0],[1],[2]
     bool visited_points[1000];           // Used to distinguish the points that have been visited in the graph
-    // geometry_msg::Point robot_surrounding_points[2];
-    // geometry_msg::Point target_surrounding_points[2];
+    // geometry_msgs::Point robot_surrounding_points[2];
+    // geometry_msgs::Point target_surrounding_points[2];
 
     // GRAPHICAL DISPLAY
     int nb_pts;
@@ -210,12 +214,15 @@ public:
         target.x = 0;
         target.y = 0;
 
+        // path_points = new list<geometry_msgs::Point>();
+
         m_max_base_distance = MAX_BASE_DIST;
 
         rot_sign_aruco_search = 1.0;
         aruco_position.x      = 0.0;
         aruco_position.y      = 0.0;
 
+#ifdef STATIC_TESTING_BFS
         // Create a fake graph to test the path finding algorithm // Use the map of the plateau
         end_points_positions[0].x = -0.282858;
         end_points_positions[0].y = -1.18731;
@@ -225,15 +232,18 @@ public:
         end_points_positions[2].y = -7.57191;
 
         connection[0][0] = 1;
-        connection[0][1] = 2;
         connection[1][0] = 0;
         connection[1][1] = 2;
-        connection[2][0] = 0;
-        connection[2][1] = 1;
+        connection[2][0] = 1;
 
-        vertex_connection_degree[0] = 2;
+        vertex_connection_degree[0] = 1;
         vertex_connection_degree[1] = 2;
-        vertex_connection_degree[2] = 2;
+        vertex_connection_degree[2] = 1;
+
+        number_of_end_points = 3;
+        target.x             = 3.91112;
+        target.y             = -4.37961;
+#endif
 
         // INFINITE LOOP TO COLLECT LASER DATA AND PROCESS THEM
         ros::Rate r(10);      // this node will work at 10hz
@@ -244,6 +254,10 @@ public:
                               // taken less than 0.1s (ie, 10 hz)
         }
     }
+
+    // ~decision_node() {
+    //     delete path_points;
+    // }
 
     // UPDATE: main processing of laser data
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -269,11 +283,12 @@ public:
             state_has_changed = current_state != previous_state;
             previous_state    = current_state;
 
-        } else
+        } else {
             ROS_WARN("Initialize odometry, obstacle detection, lateral "
                      "distances, localization and obstacle avoidance"
                      "before starting decision node.");
-
+            process_navigate_in_map();
+        }
     }  // update
 
     void update_variables() {
@@ -540,28 +555,56 @@ public:
     void process_navigate_in_map() {
         ROS_INFO("current_state: process_navigate_in_map");
 
-        robot_surrounding_points_id            = get_surrounding_points(localization);
-        target_surrounding_points_id           = get_surrounding_points(target);
-        list<geometry_msg::Point> path_pointsA = getPath(target_surrounding_points[0], robot_surrounding_points_id);
-        list<geometry_msg::Point> path_pointsB = getPath(target_surrounding_points[1], robot_surrounding_points_id);
+        localization.x = 0.282858;
+        localization.y = -1.18731;
 
-        if (path.pointsA.size() < path.pointsB.size()) {
+        int robot_surrounding_points[2];
+        int target_surrounding_points[2];
+        get_surrounding_points(localization, robot_surrounding_points);
+        get_surrounding_points(target, target_surrounding_points);
+
+        list<geometry_msgs::Point> path_pointsA;
+        list<geometry_msgs::Point> path_pointsB;
+        getPath(target_surrounding_points[0], robot_surrounding_points, &path_pointsA);
+        getPath(target_surrounding_points[1], robot_surrounding_points, &path_pointsB);
+
+        // copy surrounding points
+        robot_surrounding_points_id[0]  = robot_surrounding_points[0];
+        robot_surrounding_points_id[1]  = robot_surrounding_points[1];
+        target_surrounding_points_id[0] = target_surrounding_points[0];
+        target_surrounding_points_id[1] = target_surrounding_points[1];
+
+        if (path_pointsA.size() < path_pointsB.size()) {
             path_points = path_pointsA;
         } else {
             path_points = path_pointsB;
         }
+
+        string path_string                   = "";
+        list<geometry_msgs::Point> test_path = path_points;
+        cout << "Full path: ";
+        for (int i = 0; i < path_points.size(); i++) {
+            geometry_msgs::Point node = test_path.front();
+            string x_axis             = to_string(node.x);
+            string y_axis             = to_string(node.y);
+            path_string += ("(" + x_axis + ", " + y_axis + ") ");
+            test_path.pop_front();
+            cout << ("(" + x_axis + ", " + y_axis + ") ");
+        }
+        cout << endl;
     }
 
     // CALLBACKS
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
-    int[] get_surrounding_points(geometry_msgs::Point point) {
+    void get_surrounding_points(geometry_msgs::Point point, int* surrounding_points) {
         // for each point in end_points_positions, calculate the distance to the point passed as parameter and
         // store the two closest points in an array and return it
         // geometry_msgs::Point surrounding_points[2];
-        int surrounding_points[2];
         float distance_to_point1 = INT_MAX;
         float distance_to_point2 = INT_MAX;
+
+        ROS_INFO("get_surrounding_points - point: (%f, %f)", point.x, point.y);
 
         for (int i = 0; i < number_of_end_points; i++) {
             // float distance_to_point = distancePoints(point, end_points_positions[i]);
@@ -598,25 +641,30 @@ public:
                 }
             }
         }
-
-        return surrounding_points;
     }
 
-    list<geometry_msg::Point> getPath(int initial_vertex, int[] robot_surrounding_points_id) {
+    void getPath(int initial_vertex, int* robot_surrounding_points_id, list<geometry_msgs::Point>* path) {
+        ROS_INFO("getPath - initial_vertex: %d", initial_vertex);
+
         // Implement BFS algorithm to find the shortest path between two points in the graph
         bool found = false;
+        int found_id;
 
         // Visiting vertex list
-        list<int> visiting_vertices;
+        list<int> visiting_vertices;  //= new list<int>();
 
         // Path to be returned
-        map<int, int> parents;
-        list<geometry_msg::Point> path;
+        map<int, int> parents;  // = new map<int, int>();
+        // list<geometry_msgs::Point> path;  // = new list<geometry_msgs::Point>();
 
         // Mark initial vertex as visited
-        geometry_msg::Point vertex     = end_points_positions[initial_vertex];
+        geometry_msgs::Point vertex    = end_points_positions[initial_vertex];
         visited_points[initial_vertex] = true;
         visiting_vertices.push_back(initial_vertex);
+
+        for (int i = 0; i < number_of_end_points; i++) {
+            visited_points[i] = false;
+        }
 
         // Traverse graph
         while (!visiting_vertices.empty()) {
@@ -627,15 +675,15 @@ public:
 
             // Check each vertex neighbors
             for (int e = 0; e < vertex_connection_degree[vertex_id]; e++) {
-                int neighbor_vertex_id              = connection[vertex_id][e];
-                geometry_msg::Point neighbor_vertex = end_points_positions[neighbor_vertex_id];
-                parents.insert(pair<int, int>(neighbor_vertex_id, vertex_id));
+                int neighbor_vertex_id               = connection[vertex_id][e];
+                geometry_msgs::Point neighbor_vertex = end_points_positions[neighbor_vertex_id];
 
                 // In case neighbor vertex is not visited, visit and insert it to the queue
                 // In case it has been visited, check if the edge has already been visited.
                 if (!visited_points[neighbor_vertex_id]) {
                     visiting_vertices.push_back(neighbor_vertex_id);
                     visited_points[neighbor_vertex_id] = true;
+                    parents.insert(pair<int, int>(neighbor_vertex_id, vertex_id));
                 }
 
                 if (neighbor_vertex_id == robot_surrounding_points_id[0] ||
@@ -654,11 +702,15 @@ public:
         // Reconstruct path
         int current_vertex_id = robot_surrounding_points_id[found_id];
         while (current_vertex_id != initial_vertex) {
-            path.push_front(end_points_positions[current_vertex_id]);
+            path->push_front(end_points_positions[current_vertex_id]);
             current_vertex_id = parents[current_vertex_id];
         }
 
-        return path;
+        if (current_vertex_id == initial_vertex) {
+            path->push_back(end_points_positions[current_vertex_id]);
+        }
+
+        // return path;
     }
 
     // CALLBACKS
