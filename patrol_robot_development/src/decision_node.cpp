@@ -21,24 +21,18 @@
 
 using namespace std;
 
-/**
- * TODO:
- * 1 - Create static points in the map to be used as reference for the robot (vertices in the graph)
- * 2 - Create a graph with the points in the map
- * 3 - Create a function to calculate the shortest path between two points in the graph (BFS)
- * 4 - Create a function to find the two vertices surrounding the robot and the target
- * 5 - Create a function to find the path between the robot and target. Starting in the target, go in
- *     reverse order until one of the vertices is one of both surrounding the robot.
- */
+// ROS_BREAK();
 
 // Display goal_to_reach marker from avoid_lateral_crash
 // #define DISPLAY_DEBUG 1
 
 // Patrol robot processes
-#define searching_aruco_marker 0
-#define moving_to_aruco_marker 1
-#define avoiding_lateral_crash 2
-#define bypass_obstacle 3
+#define moving_to_aruco_marker 5
+#define avoiding_lateral_crash 4
+#define searching_aruco_marker 3
+#define bypass_obstacle 2
+#define moving_in_path 1
+#define creating_path 0
 
 // Future process
 // #define avoiding_obstacle 3
@@ -50,6 +44,7 @@ using namespace std;
 #define obstacle_safety_threshold 1
 
 #define DEBUG_GETCHAR_ENABLED 0
+#define DISPLAY_DEBUG 1
 #define STATIC_TESTING_BFS 1
 
 // Philip Plateau Test
@@ -80,6 +75,7 @@ private:
     // DEBUG
     ros::Publisher pub_goal_marker;
     ros::Publisher pub_localization_marker;
+    ros::Publisher pub_path_marker;
 
     // communication with robot_moving_node
     ros::Subscriber sub_robot_moving;
@@ -146,6 +142,7 @@ private:
     int robot_surrounding_points_id[2];
     int target_surrounding_points_id[2];
     list<geometry_msgs::Point> path_points;
+    list<geometry_msgs::Point> path_left;
     int connection[1000][1000];          // Act as edges in the graph
     int vertex_connection_degree[1000];  // If a vertex has connection with 3 other vertices then its degree is 3 and we
                                          // use connection [0],[1],[2]
@@ -195,8 +192,9 @@ public:
         // DEBUG
         pub_goal_marker         = n.advertise<visualization_msgs::Marker>("goal_to_reach_marker", 1);
         pub_localization_marker = n.advertise<visualization_msgs::Marker>("localization_marker", 1);
+        pub_path_marker         = n.advertise<visualization_msgs::Marker>("path_marker", 1);
 
-        current_state  = searching_aruco_marker;
+        current_state  = creating_path;
         previous_state = -1;
 
         new_aruco              = false;
@@ -274,10 +272,17 @@ public:
             //     process_searching_aruco_marker();
             // else if (current_state == moving_to_aruco_marker && apf_in_execution == false)
             //     process_moving_to_aruco_marker();
-            // else if (current_state == bypasass_obstacle)
+            // else if (current_state == bypass_obstacle)
             //     process_bypass_obstacle();
             // else
-            process_navigate_in_map();
+            //     process_navigate_in_map();
+
+            if (current_state == moving_in_path && apf_in_execution == false)
+                process_moving_in_path();
+            else if (current_state == bypass_obstacle)
+                process_bypass_obstacle();
+            else
+                process_navigate_in_map();
 
             new_aruco         = false;
             state_has_changed = current_state != previous_state;
@@ -287,7 +292,7 @@ public:
             ROS_WARN("Initialize odometry, obstacle detection, lateral "
                      "distances, localization and obstacle avoidance"
                      "before starting decision node.");
-            process_navigate_in_map();
+            // process_navigate_in_map();
         }
     }  // update
 
@@ -340,7 +345,7 @@ public:
         display[nb_pts].z = 0;
         nb_pts++;
 
-        populateMarkerTopic();
+        populateMarkerTopic("map", pub_localization_marker);
     }
 
     // Patrol robot - processes
@@ -505,9 +510,9 @@ public:
         //         nb_pts++;
         //         populateMarkerTopic();
         // #endif
-        current_state = searching_aruco_marker;
+        current_state = 0;  // searching_aruco_marker;
 
-    }  // process_avoid_lateral_crash
+    }                       // process_avoid_lateral_crash
 
     void process_bypass_obstacle() {
         ROS_INFO("current_state: process_bypass_obstacle");
@@ -515,7 +520,7 @@ public:
         // if there is no aruco position, skip it
         if (aruco_position.x <= 0.00001 && aruco_position.y <= 0.00001 && target.x <= 0.00001 && target.y <= 0.00001) {
             ROS_ERROR("Aruco marker position is (0,0), there is no reason to bypass obstacle. [Decision node]");
-            current_state = searching_aruco_marker;
+            current_state = 0;  // searching_aruco_marker;
             return;
         }
 
@@ -532,31 +537,66 @@ public:
         bypass_msg.target_found      = aruco_position.x == 0 && aruco_position.y == 0 ? false : true;
         bypass_msg.enable_apf        = true;
 
-        // ROS_WARN("-- Message sent to bypass obstacle -- "
-        //          "\n\tGoal  = (%f, %f)"
-        //          "\n\tFront = (%f, %f)"
-        //          "\n\tLeft  = (%f, %f)"
-        //          "\n\tRight = (%f, %f)"
-        //          "\n\tFound = (%d)"
-        //          "\n\tAruco = (%f, %f)"
-        //          "\n\tAPF   = (%d)"
-        //          "\n\tTarget= (%f, %f)"
-        //          "\n\tBypass= (%f, %f)",
-        //          bypass_msg.goal_to_reach.x, bypass_msg.goal_to_reach.y, bypass_msg.front_obstacle.x,
-        //          bypass_msg.front_obstacle.y, bypass_msg.lt_obstacle_point.x, bypass_msg.lt_obstacle_point.y,
-        //          bypass_msg.rt_obstacle_point.x, bypass_msg.rt_obstacle_point.y, bypass_msg.target_found,
-        //          aruco_position.x, aruco_position.y, apf_in_execution, target.x, target.y, bypass_done_target.x,
-        //          bypass_done_target.y);
-        // ROS_BREAK();
-
         pub_obstacle_avoidance.publish(bypass_msg);
+    }
+
+    void process_moving_in_path() {
+        ROS_WARN("current_state: process_moving_in_path");
+
+        // Publish one point of the path to follow, until it gets there checking localization,
+        // keep publishing that point, after it reached a threashold distance, remove that point
+        // from the path and publish the next one
+
+        if (path_points.size() == 0) {
+            ROS_WARN("Path is empty, cannot move in path.");
+            return;
+        }
+
+        if (apf_in_execution) {
+            ROS_ERROR("APF in execution, cannot move in path.");
+            return;
+        }
+
+        geometry_msgs::Point goal = path_points.front();
+
+        if (state_has_changed && previous_state != bypass_obstacle) {
+            // Send the goal to reach
+            geometry_msgs::Point msg_goal_to_reach;
+            msg_goal_to_reach = path_points.front();
+            path_points.pop_front();
+            msg_goal_to_reach.z = (float)current_state;
+
+            if (msg_goal_to_reach.x == 0.0 && msg_goal_to_reach.y == 0.0) {
+                ROS_ERROR("Position is (0,0), cannot move to it. [Decision node - process_moving_in_path]");
+                return;
+            }
+            pub_goal_to_reach.publish(msg_goal_to_reach);
+
+        } else {
+            // Check if the robot has reached the goal
+            float distance_to_goal = distancePoints(localization, goal);
+            if (distance_to_goal <= 0.5) {
+                ROS_INFO("Reached goal, removing it from the path.");
+                geometry_msgs::Point msg_goal_to_reach;
+                msg_goal_to_reach = path_points.front();
+                path_points.pop_front();
+
+                if (msg_goal_to_reach.x == 0.0 && msg_goal_to_reach.y == 0.0) {
+                    ROS_ERROR("Position is (0,0), cannot move to it. [Decision node - process_moving_in_path]");
+                    return;
+                }
+                pub_goal_to_reach.publish(msg_goal_to_reach);
+            }
+        }
     }
 
     void process_navigate_in_map() {
         ROS_INFO("current_state: process_navigate_in_map");
 
+#ifdef STATIC_TESTING_BFS
         localization.x = 0.282858;
         localization.y = -1.18731;
+#endif
 
         int robot_surrounding_points[2];
         int target_surrounding_points[2];
@@ -580,18 +620,42 @@ public:
             path_points = path_pointsB;
         }
 
-        string path_string                   = "";
-        list<geometry_msgs::Point> test_path = path_points;
-        cout << "Full path: ";
-        for (int i = 0; i < path_points.size(); i++) {
-            geometry_msgs::Point node = test_path.front();
-            string x_axis             = to_string(node.x);
-            string y_axis             = to_string(node.y);
-            path_string += ("(" + x_axis + ", " + y_axis + ") ");
-            test_path.pop_front();
-            cout << ("(" + x_axis + ", " + y_axis + ") ");
+        // Copy path_points to path_left
+        list<geometry_msgs::Point>::iterator it;
+        for (it = path_points.begin(); it != path_points.end(); ++it) {
+            path_left.push_back(*it);
         }
-        cout << endl;
+
+        // Add the goal to the path
+        path_points.push_back(target);
+        path_left.push_back(target);
+
+        current_state = moving_in_path;
+
+// Display in RVIZ the path to follow in purple and the last point in path in orange
+#ifdef DISPLAY_DEBUG
+        // path in rviz is purple
+        nb_pts           = 0;
+        colors[nb_pts].r = 0.5;
+        colors[nb_pts].g = 0;
+        colors[nb_pts].b = 0.5;
+        colors[nb_pts].a = 1.0;
+        for (it = path_points.begin(); it != path_points.end(); ++it) {
+            display[nb_pts] = *it;
+            nb_pts++;
+        }
+        populateMarkerTopic("map", pub_path_marker);
+
+        // last point in path in rviz is orange
+        nb_pts           = 0;
+        colors[nb_pts].r = 1;
+        colors[nb_pts].g = 0.5;
+        colors[nb_pts].b = 0;
+        colors[nb_pts].a = 1.0;
+        display[nb_pts]  = target;
+        nb_pts++;
+        populateMarkerTopic("map", pub_path_marker);
+#endif
     }
 
     // CALLBACKS
@@ -750,15 +814,10 @@ public:
         bypass_done_target = obs->goal_to_reach;
         apf_in_execution   = obs->apf_in_execution;
 
-        // ROS_WARN("--- Bypass done callback - data --- "
-        //          "\n\tGoal  = (%f, %f)"
-        //          "\n\tAPF   = (%d)",
-        //          bypass_done_target.x, bypass_done_target.y, apf_in_execution);
-        // ROS_BREAK();
-
         // Done to lock/unlock the current process in bypass_obstacle
         if (!apf_in_execution) {
-            current_state = searching_aruco_marker;
+            // current_state = searching_aruco_marker;
+            current_state = 0;
         } else {
             current_state = bypass_obstacle;
         }
@@ -788,10 +847,10 @@ public:
     // ///////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Draw the field of view and other references
-    void populateMarkerReference() {
+    void populateMarkerReference(string frame_name, ros::Publisher publisher) {
         visualization_msgs::Marker references;
 
-        references.header.frame_id    = "map";  //"laser";
+        references.header.frame_id    = frame_name;  //"map";  //"laser";
         references.header.stamp       = ros::Time::now();
         references.ns                 = "example";
         references.id                 = 1;
@@ -837,13 +896,13 @@ public:
         references.points.push_back(v);
 
         // pub_goal_marker.publish(references);
-        pub_localization_marker.publish(references);
+        publisher.publish(references);
     }
 
-    void populateMarkerTopic() {
+    void populateMarkerTopic(string frame_name, ros::Publisher publisher) {
         visualization_msgs::Marker marker;
 
-        marker.header.frame_id = "map";  //"laser";
+        marker.header.frame_id = frame_name;  //"map";  //"laser";
         marker.header.stamp    = ros::Time::now();
         marker.ns              = "example";
         marker.id              = 0;
@@ -878,8 +937,8 @@ public:
         }
 
         // pub_goal_marker.publish(marker);
-        pub_localization_marker.publish(marker);
-        populateMarkerReference();
+        publisher.publish(marker);
+        populateMarkerReference(frame_name, publisher);
     }
 };
 
