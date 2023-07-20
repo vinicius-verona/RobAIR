@@ -172,7 +172,7 @@ public:
         sub_robot_moving = n.subscribe("robot_moving", 1, &decision_node::robot_movingCallback, this);
 
         // Communication with localization_node
-        sub_localization = n.subscribe("localization_node", 1, &decision_node::localizationCallback, this);
+        sub_localization = n.subscribe("localization", 1, &decision_node::localizationCallback, this);
 
         // Communication with aruco_node
         sub_aruco_position = n.subscribe("robair_goal", 1, &decision_node::aruco_positionCallback, this);

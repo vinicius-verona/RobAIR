@@ -27,7 +27,7 @@ using namespace std;
 #define moving_to_aruco_marker 1
 #define saving_aruco_position 2
 
-#define safe_distance_from_aruco 1
+#define safe_distance_from_aruco 0.7
 #define lateral_safety_threshold 0.75
 #define obstacle_safety_threshold 1
 
@@ -126,7 +126,7 @@ public:
         sub_robot_moving = n.subscribe("robot_moving", 1, &generate_endpoints::robot_movingCallback, this);
 
         // Communication with localization_node
-        sub_localization = n.subscribe("localization_node", 1, &generate_endpoints::localizationCallback, this);
+        sub_localization = n.subscribe("localization", 1, &generate_endpoints::localizationCallback, this);
 
         // Communication with aruco_node
         sub_aruco_position = n.subscribe("robair_goal", 1, &generate_endpoints::aruco_positionCallback, this);
@@ -179,6 +179,8 @@ public:
                 process_searching_aruco_marker();
             else if (current_state == moving_to_aruco_marker)
                 process_moving_to_aruco_marker();
+            else if (current_state == saving_aruco_position)
+                process_saving_aruco_position();
 
             new_aruco         = false;
             state_has_changed = current_state != previous_state;
@@ -309,6 +311,10 @@ public:
         int old_frequency = frequency;
         if (!robot_moving && aruco_position.x <= safe_distance_from_aruco) {
             // Save the aruco position in a file with the map_name
+            geometry_msgs::Point msg_goal_to_reach;
+            msg_goal_to_reach.x = 0;
+            msg_goal_to_reach.y = 0;
+            pub_goal_to_reach.publish(msg_goal_to_reach);
             current_state = saving_aruco_position;
         }
 
@@ -332,13 +338,15 @@ public:
             // Open the file
             ofstream FILE;
             FILE.open(file_name + "_aruco_positions.txt", ios::app);
-            FILE << aruco_position.x << " " << aruco_position.y << " " << current_orientation << endl;
+            FILE << localization.x << " " << localization.y << " " << current_orientation << endl;
             FILE.close();
 
         } else {
             ROS_ERROR("No map name given, cannot save aruco position. [generate_map_end_points node]");
             return;
         }
+
+        current_state = searching_aruco_marker;
     }  // process_saving_aruco_position
 
     // CALLBACKS
