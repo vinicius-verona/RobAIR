@@ -110,7 +110,18 @@ private:
     std_msgs::ColorRGBA colors[2000];
 
 public:
-    generate_endpoints() {
+    generate_endpoints() : NodeHandle("~") {
+        // Auxiliary variable
+        string param_name;
+        string file_name = "";
+
+        if (searchParam("map_name", param_name))
+            getParam(param_name, file_name);
+        else {
+            ROS_ERROR("Syntax for node: rosrun package node _map_name:=\"map_name\"");
+            RO_BREAK();
+        }
+
         // Communication with action_node
         pub_goal_to_reach =
             n.advertise<geometry_msgs::Point>("goal_to_reach",
@@ -326,10 +337,6 @@ public:
         // Given the map name in _map_name, save the aruco position in a file with the name of the map +
         // "_aruco_positions.txt"
         ROS_INFO("current_state: saving_aruco_position");
-
-        // Auxiliary variable
-        string param_name;
-        string file_name = "";
 
         // Search and get the parameters
         if (searchParam("map_name", param_name)) {
