@@ -104,6 +104,10 @@ private:
     float m_max_base_distance, rot_sign_aruco_search;
     float base_orientation = 0;
 
+    // Auxiliary variable for ros parameters
+    string param_name;
+    string file_name = "";
+
     // GRAPHICAL DISPLAY
     int nb_pts;
     geometry_msgs::Point display[2000];
@@ -111,15 +115,11 @@ private:
 
 public:
     generate_endpoints() : NodeHandle("~") {
-        // Auxiliary variable
-        string param_name;
-        string file_name = "";
-
         if (searchParam("map_name", param_name))
             getParam(param_name, file_name);
         else {
             ROS_ERROR("Syntax for node: rosrun package node _map_name:=\"map_name\"");
-            RO_BREAK();
+            ROS_BREAK();
         }
 
         // Communication with action_node
@@ -338,20 +338,11 @@ public:
         // "_aruco_positions.txt"
         ROS_INFO("current_state: saving_aruco_position");
 
-        // Search and get the parameters
-        if (searchParam("map_name", param_name)) {
-            getParam(param_name, file_name);
-
-            // Open the file
-            ofstream FILE;
-            FILE.open(file_name + "_aruco_positions.txt", ios::app);
-            FILE << localization.x << " " << localization.y << " " << current_orientation << endl;
-            FILE.close();
-
-        } else {
-            ROS_ERROR("No map name given, cannot save aruco position. [generate_map_end_points node]");
-            return;
-        }
+        // Open the file
+        ofstream FILE;
+        FILE.open(file_name + "_aruco_positions.txt", ios::app);
+        FILE << localization.x << " " << localization.y << " " << current_orientation << endl;
+        FILE.close();
 
         current_state = searching_aruco_marker;
     }  // process_saving_aruco_position

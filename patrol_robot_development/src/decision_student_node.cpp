@@ -77,6 +77,10 @@ private:
     float rotation_to_base;
     geometry_msgs::Point local_base_position;
 
+    // Used to store the taget localization in the map frame
+    geometry_msgs::Point target_map_frame;
+    bool target_set;
+
     int current_state, previous_state;
     int frequency;
     geometry_msgs::Point base_position;
@@ -88,32 +92,26 @@ private:
 public:
     decision_node() {
         // communication with datmo_node
-        sub_person_position =
-            n.subscribe("person_position", 1,
-                        &decision_node::person_positionCallback, this);
+        sub_person_position = n.subscribe("person_position", 1, &decision_node::person_positionCallback, this);
 
         // communication with rotation_node
-        pub_rotation_to_do =
-            n.advertise<std_msgs::Float32>("rotation_to_do", 0);
+        pub_rotation_to_do = n.advertise<std_msgs::Float32>("rotation_to_do", 0);
 
         // communication with action_node
-        pub_goal_to_reach = n.advertise<geometry_msgs::Point>(
-            "goal_to_reach",
-            1);  // Preparing a topic to publish the position of the person
+        pub_goal_to_reach =
+            n.advertise<geometry_msgs::Point>("goal_to_reach",
+                                              1);  // Preparing a topic to publish the position of the person
 
         // communication with robot_moving_node
-        sub_robot_moving = n.subscribe(
-            "robot_moving", 1, &decision_node::robot_movingCallback, this);
+        sub_robot_moving = n.subscribe("robot_moving", 1, &decision_node::robot_movingCallback, this);
 
         // communication with amcl
-        sub_amcl =
-            n.subscribe("amcl_pose", 1, &decision_node::amclCallback, this);
+        sub_amcl          = n.subscribe("amcl_pose", 1, &decision_node::amclCallback, this);
         new_localization  = false;
         init_localization = false;
 
         // communication with my localization node
-        sub_localization = n.subscribe(
-            "localization", 1, &decision_node::localizationCallback, this);
+        sub_localization = n.subscribe("localization", 1, &decision_node::localizationCallback, this);
 
         current_state = waiting_for_a_person;
         // current_state = returning_to_the_base;
@@ -135,8 +133,8 @@ public:
         while (ros::ok()) {
             ros::spinOnce();  // each callback is called once
             update();
-            r.sleep();  // we wait if the processing (ie, callback+update) has
-                        // taken less than 0.1s (ie, 10 hz)
+            r.sleep();        // we wait if the processing (ie, callback+update) has
+                              // taken less than 0.1s (ie, 10 hz)
         }
     }
 
@@ -196,12 +194,10 @@ public:
 
     void update_variables() {
         if (new_person_position) {
-            translation_to_person =
-                distancePoints(origin_position, person_position);
+            translation_to_person = distancePoints(origin_position, person_position);
 
             if (translation_to_person > 0) {
-                rotation_to_person =
-                    acos(person_position.x / translation_to_person);
+                rotation_to_person = acos(person_position.x / translation_to_person);
                 if (person_position.y < 0)
                     rotation_to_person *= -1;
             } else
@@ -215,13 +211,11 @@ public:
 
             // we have a rotation and a translation to perform
             // we compute the /translation_to_do
-            translation_to_base =
-                distancePoints(origin_position, local_base_position);
+            translation_to_base = distancePoints(origin_position, local_base_position);
 
             if (translation_to_base > 0) {
                 // we compute the /rotation_to_do
-                rotation_to_base =
-                    acos(local_base_position.x / translation_to_base);
+                rotation_to_base = acos(local_base_position.x / translation_to_base);
 
                 if (local_base_position.y < 0)
                     rotation_to_base *= -1;
@@ -233,21 +227,17 @@ public:
                 if (rotation_to_base > M_PI) {
                     ROS_WARN("rotation_to_base > 180 degrees: %f degrees -> %f "
                              "degrees",
-                             rotation_to_base * 180 / M_PI,
-                             (rotation_to_base - 2 * M_PI) * 180 / M_PI);
+                             rotation_to_base * 180 / M_PI, (rotation_to_base - 2 * M_PI) * 180 / M_PI);
                     rotation_to_base -= 2 * M_PI;
                 } else if (rotation_to_base < -M_PI) {
                     ROS_WARN("rotation_to_base < -180 degrees: %f degrees -> "
                              "%f degrees",
-                             rotation_to_base * 180 / M_PI,
-                             (rotation_to_base + 2 * M_PI) * 180 / M_PI);
+                             rotation_to_base * 180 / M_PI, (rotation_to_base + 2 * M_PI) * 180 / M_PI);
                     rotation_to_base += 2 * M_PI;
                 }
 
-                local_base_position.x =
-                    translation_to_base * cos(rotation_to_base);
-                local_base_position.y =
-                    translation_to_base * sin(rotation_to_base);
+                local_base_position.x = translation_to_base * cos(rotation_to_base);
+                local_base_position.y = translation_to_base * sin(rotation_to_base);
 
                 //                pub_person_position.publish(local_person_position);
             }
@@ -271,10 +261,8 @@ public:
 
         // Processing of the state
         if (new_person_position) {
-            ROS_INFO("person_position: (%f, %f)", person_position.x,
-                     person_position.y);
-            ROS_INFO("rotation_to_person: %f degrees",
-                     rotation_to_person * 180 / M_PI);
+            ROS_INFO("person_position: (%f, %f)", person_position.x, person_position.y);
+            ROS_INFO("rotation_to_person: %f degrees", rotation_to_person * 180 / M_PI);
 
             // send the rotation to do
             std_msgs::Float32 msg_rotation_to_person;
@@ -314,8 +302,7 @@ public:
 
         // processing new position for the person
         if (new_person_position) {
-            ROS_INFO("person_position: (%f, %f)", person_position.x,
-                     person_position.y);
+            ROS_INFO("person_position: (%f, %f)", person_position.x, person_position.y);
             ROS_INFO("translation_to_person: %f meters", translation_to_person);
 
             // send the goal to reach
@@ -369,19 +356,14 @@ public:
         }
 
         if (new_localization || state_has_changed) {
-            ROS_INFO("current_position: (%f, %f, %f)", current_position.x,
-                     current_position.y, current_orientation * 180 / M_PI);
-            ROS_INFO("base_position: (%f, %f)", base_position.x,
-                     base_position.y);
-
-            ROS_INFO("rotation_to_base: %f = %f - %f",
-                     rotation_to_base * 180 / M_PI,
-                     (rotation_to_base + current_orientation) * 180 / M_PI,
+            ROS_INFO("current_position: (%f, %f, %f)", current_position.x, current_position.y,
                      current_orientation * 180 / M_PI);
-            ROS_INFO(
-                "local_base_position: (r = %f, theta = %f) -> (x = %f, y = %f)",
-                translation_to_base, rotation_to_base * 180 / M_PI,
-                local_base_position.x, local_base_position.y);
+            ROS_INFO("base_position: (%f, %f)", base_position.x, base_position.y);
+
+            ROS_INFO("rotation_to_base: %f = %f - %f", rotation_to_base * 180 / M_PI,
+                     (rotation_to_base + current_orientation) * 180 / M_PI, current_orientation * 180 / M_PI);
+            ROS_INFO("local_base_position: (r = %f, theta = %f) -> (x = %f, y = %f)", translation_to_base,
+                     rotation_to_base * 180 / M_PI, local_base_position.x, local_base_position.y);
             /*        pub_goal_to_reach.publish(origin_position);
                     ROS_INFO("press enter to continue");
                     getchar();*/
@@ -413,8 +395,8 @@ public:
         }
 
         if (new_localization || state_has_changed) {
-            ROS_INFO("current_position: (%f, %f, %f)", current_position.x,
-                     current_position.y, current_orientation * 180 / M_PI);
+            ROS_INFO("current_position: (%f, %f, %f)", current_position.x, current_position.y,
+                     current_orientation * 180 / M_PI);
             ROS_INFO("base_orientation: %f", base_orientation * 180 / M_PI);
 
             /*    if ( fabs(base_orientation-current_orientation) > M_PI/9 )
@@ -437,8 +419,7 @@ public:
 
         // 1st condition to leave
         int old_frequency = frequency;
-        if (!robot_moving &&
-            fabs(base_orientation - current_orientation) < M_PI / 6) {
+        if (!robot_moving && fabs(base_orientation - current_orientation) < M_PI / 6) {
             frequency++;
             if (frequency >= frequency_expected) {
                 current_state     = waiting_for_a_person;
@@ -470,8 +451,7 @@ public:
 
     }  // robot_movingCallback
 
-    void amclCallback(
-        const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& l) {
+    void amclCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& l) {
         // process the localization received from amcl_pose
 
         new_localization    = true;

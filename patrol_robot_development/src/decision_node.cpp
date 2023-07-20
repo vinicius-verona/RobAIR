@@ -131,6 +131,10 @@ private:
     geometry_msgs::Point origin_position;
     bool state_has_changed;
 
+    // Used to store the taget localization in the map frame
+    geometry_msgs::Point target_map_frame;
+    bool target_set;
+
     // force odom reset via this topic
     ros::Publisher pub_change_odom;
 
@@ -835,7 +839,12 @@ public:
         init_localization   = true;
         localization        = *l;
         current_orientation = clamp(l->z);
-    }
+    }  // localizationCallback
+
+    void targetLocalizationCallback(const geometry_msgs::Point::ConstPtr& t) {
+        target_map_frame = t;
+        target_set       = true;
+    }  // targetLocalizationCallback
 
     // Distance between two points
     float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {
