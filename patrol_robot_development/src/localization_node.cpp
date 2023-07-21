@@ -41,6 +41,12 @@ private:
     ros::Publisher pub_localization_complete_marker;
     ros::Publisher pub_localization;
     ros::Subscriber sub_position;
+    ros::Subscriber sub_target_position;
+
+    // to store the target position of the mobile robot
+    bool target_position_set;
+    geometry_msgs::Point target_position;
+    float target_orientation;
 
     // to store, process and display laserdata
     bool init_laser;
@@ -107,7 +113,8 @@ public:
             n.advertise<geometry_msgs::Point>("localization",
                                               1);  // Preparing a topic to publish the position of the person
 
-        sub_position = n.subscribe("initialpose", 1, &localization_node::positionCallback, this);
+        sub_position        = n.subscribe("initialpose", 1, &localization_node::positionCallback, this);
+        sub_target_position = n.subscribe("move_base_simple/goal", 1, &localization_node::targetPositionCallback, this);
 
         // get map via RPC
         nav_msgs::GetMap::Request req;
@@ -123,6 +130,7 @@ public:
         init_odom                = false;
         init_laser               = false;
         init_position            = false;
+        target_position_set      = false;
         localization_initialized = false;
 
         width_max  = resp.map.info.width;
@@ -483,6 +491,13 @@ public:
         initial_position.x  = p->pose.pose.position.x;
         initial_position.y  = p->pose.pose.position.y;
         initial_orientation = tf::getYaw(p->pose.pose.orientation);
+    }
+
+    void targetPositionCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &p) {
+        target_position_set = true;
+        target_position.x   = p->pose.pose.position.x;
+        target_position.y   = p->pose.pose.position.y;
+        target_orientation  = tf::getYaw(p->pose.pose.orientation);
     }
 
     // GRAPHICAL_DISPLAY

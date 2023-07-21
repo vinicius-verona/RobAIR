@@ -13,6 +13,7 @@
 
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/Quaternion.h"
+#include "nav_msgs/GetMap.h"
 #include "nav_msgs/Odometry.h"
 #include "ros/ros.h"
 #include "std_msgs/Bool.h"
@@ -111,6 +112,9 @@ private:
     string param_name;
     string file_name = "";
 
+    // Get data from map
+    nav_msgs::GetMap::Response resp;
+
     // GRAPHICAL DISPLAY
     int nb_pts;
     geometry_msgs::Point display[2000];
@@ -124,26 +128,6 @@ public:
             ROS_ERROR("Syntax for node: rosrun package node _map_name:=\"map_name\"");
             ROS_BREAK();
         }
-
-        // Communication with action_node
-        pub_goal_to_reach =
-            n.advertise<geometry_msgs::Point>("goal_to_reach",
-                                              1);  // Preparing a topic to publish the position of the person
-        pub_rotation_to_do =
-            n.advertise<std_msgs::Float32>("rotation_to_do",
-                                           1);  // Preparing a topic to publish the rotation of the person
-
-        // Communication with odometry
-        sub_odometry = n.subscribe("odom", 1, &generate_endpoints::odomCallback, this);
-
-        // Communication with robot_moving_node
-        sub_robot_moving = n.subscribe("robot_moving", 1, &generate_endpoints::robot_movingCallback, this);
-
-        // Communication with localization_node
-        sub_localization = n.subscribe("localization", 1, &generate_endpoints::localizationCallback, this);
-
-        // Communication with aruco_node
-        sub_aruco_position = n.subscribe("robair_goal", 1, &generate_endpoints::aruco_positionCallback, this);
 
         // Communication with obstacle_detection
         sub_obstacle_detection =
@@ -172,6 +156,15 @@ public:
         rot_sign_aruco_search = 1.0;
         aruco_position.x      = 0.0;
         aruco_position.y      = 0.0;
+
+        // get map via RPC
+        nav_msgs::GetMap::Request req;
+        ROS_INFO("Requesting the map...");
+        while (!ros::service::call("static_map", req, resp)) {
+            ROS_WARN("Request for map failed; trying again...");
+            ros::Duration d(0.5);
+            d.sleep();
+        }
 
         // INFINITE LOOP TO COLLECT LASER DATA AND PROCESS THEM
         ros::Rate r(10);      // this node will work at 10hz
@@ -409,6 +402,23 @@ public:
                 return true;
             }
         }
+    }
+
+    int cell_value(float x, float y) {
+        // returns the value of the cell corresponding to the position (x, y) in
+        // the map returns 100 if cell(x, y) is occupied, 0 if cell(x, y) is
+        // free
+
+        if ((min.x <= x) && (x <= max.x) && (min.y <= y) && (y <= max.y)) {
+            float x_cell = (x - min.x) / cell_size;
+            float y_cell = (y - min.y) / cell_size;
+            int x_int    = x_cell;
+            int y_int    = y_cell;
+            // ROS_INFO("cell[%f = %d][%f = %d] = %d", x_cell, x_int, y_cell,
+            // y_int, map[x_int][y_int]);
+            return (resp.map.data[width_max * y_int + x_int]);
+        } else
+            return (-1);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////

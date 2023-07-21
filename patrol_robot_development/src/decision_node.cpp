@@ -68,7 +68,7 @@ float clamp(float orientation) {
     return orientation;
 }
 
-class decision_node {
+class decision_node : ros::NodeHandle {
 private:
     ros::NodeHandle n;
 
@@ -132,8 +132,10 @@ private:
     bool state_has_changed;
 
     // Used to store the taget localization in the map frame
-    geometry_msgs::Point target_map_frame;
+    ros::Subscriber sub_target_position;
     bool target_set;
+    geometry_msgs::Point target_map_frame;
+    float target_orientation;
 
     // force odom reset via this topic
     ros::Publisher pub_change_odom;
@@ -154,13 +156,17 @@ private:
     // geometry_msgs::Point robot_surrounding_points[2];
     // geometry_msgs::Point target_surrounding_points[2];
 
+    // Used to store the graph
+    string filename;
+    string map_name;
+
     // GRAPHICAL DISPLAY
     int nb_pts;
     geometry_msgs::Point display[2000];
     std_msgs::ColorRGBA colors[2000];
 
 public:
-    decision_node() {
+    decision_node() : NodeHandle("~") {
         // Communication with action_node
         pub_goal_to_reach =
             n.advertise<geometry_msgs::Point>("goal_to_reach",
@@ -177,6 +183,9 @@ public:
 
         // Communication with localization_node
         sub_localization = n.subscribe("localization", 1, &decision_node::localizationCallback, this);
+
+        // Communication with rviz to set the target position
+        sub_target_position = n.subscribe("move_base_simple/goal", 1, &localization_node::targetPositionCallback, this);
 
         // Communication with aruco_node
         sub_aruco_position = n.subscribe("robair_goal", 1, &decision_node::aruco_positionCallback, this);
@@ -216,13 +225,29 @@ public:
         target.x = 0;
         target.y = 0;
 
-        // path_points = new list<geometry_msgs::Point>();
+        // initialize vertex_connection_degree with 0
+        for (int i = 0; i < 1000; i++) {
+            vertex_connection_degree[i] = 0;
+        }
 
         m_max_base_distance = MAX_BASE_DIST;
 
         rot_sign_aruco_search = 1.0;
         aruco_position.x      = 0.0;
         aruco_position.y      = 0.0;
+
+        std::string param_name;
+        // Search and get the parameters
+        if (searchParam("map_name", param_name)) {
+            getParam(param_name, map_name);
+        } else {
+            ROS_WARN("Parameter 'map_name' not defined");
+            ROS_BREAK();
+        }
+
+        filename = map_name + "_aruco_positions.txt";
+        ROS_INFO("Loading graph from %s file", filename);
+        load_graph_from_file(filename);
 
 #ifdef STATIC_TESTING_BFS
         // Create a fake graph to test the path finding algorithm // Use the map of the plateau
@@ -841,123 +866,174 @@ public:
         current_orientation = clamp(l->z);
     }  // localizationCallback
 
-    void targetLocalizationCallback(const geometry_msgs::Point::ConstPtr& t) {
-        target_map_frame = t;
-        target_set       = true;
-    }  // targetLocalizationCallback
+    void targetPositionCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& p) {
+        target_set         = true;
+        target_map_frame.x = p->pose.pose.position.x;
+        target_map_frame.y = p->pose.pose.position.y;
+        target_orientation = tf::getYaw(p->pose.pose.orientation);
+    }
 
     // Distance between two points
     float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {
         return sqrt(pow((pa.x - pb.x), 2.0) + pow((pa.y - pb.y), 2.0));
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // DEBUG
-    // ///////////////////////////////////////////////////////////////////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Draw the field of view and other references
-    void populateMarkerReference(string frame_name, ros::Publisher publisher) {
-        visualization_msgs::Marker references;
+    void load_graph_from_file(string file) {
+        // Open the file
+        ofstream FILE;
+        FILE.open(file, ios::in);
+        string line;
+        bool edges_section = false;
 
-        references.header.frame_id    = frame_name;  //"map";  //"laser";
-        references.header.stamp       = ros::Time::now();
-        references.ns                 = "example";
-        references.id                 = 1;
-        references.type               = visualization_msgs::Marker::LINE_STRIP;
-        references.action             = visualization_msgs::Marker::ADD;
-        references.pose.orientation.w = 1;
+        while (getline(file, line)) {
+            istringstream iss(line);
+            float x, y, z;
 
-        references.scale.x = 0.02;
+            // Skip empty lines
+            if (line.empty()) {
+                continue;
+            }
 
-        references.color.r = 1.0f;
-        references.color.g = 1.0f;
-        references.color.b = 1.0f;
-        references.color.a = 1.0;
-        geometry_msgs::Point v;
+            if (!edges_section) {
+                if (line == "################## edges ##################") {
+                    edges_section = true;
+                }
+            }
 
-        v.x = 0.02 * cos(-2.356194);
-        v.y = 0.02 * sin(-2.356194);
-        v.z = 0.0;
-        references.points.push_back(v);
+            if (!edges_section) {
+                if (iss >> x >> y >> z) {
+                    // Add the point to the list of end points
+                    geometry_msgs::Point p;
+                    p.x = x;
+                    p.y = y;
+                    p.z = 0;
+                    end_points_positions.push_back(p);
+                } else {
+                    ROS_ERROR("Error reading graph file. [ end-points section ]");
+                }
+            } else {
+                int v1, v2;
+                if (iss >> v1 >> v2) {
+                    // Add the connection to the list of connections
+                    connection[v1][vertex_connection_degree[v1]] = v2;
+                    vertex_connection_degree[v1]++;
+                    connection[v2][vertex_connection_degree[v2]] = v1;
+                    vertex_connection_degree[v2]++;
+                } else {
+                    ROS_ERROR("Error reading graph file. [ edges section ]");
+                }
+            }
 
-        v.x = 5.6 * cos(-2.356194);
-        v.y = 5.6 * sin(-2.356194);
-        v.z = 0.0;
-        references.points.push_back(v);
+            FILE.close();
+        }
 
-        float beam_angle = -2.356194 + 0.006136;
-        // first and last beam are already included
-        for (int i = 0; i < 723; i++, beam_angle += 0.006136) {
-            v.x = 5.6 * cos(beam_angle);
-            v.y = 5.6 * sin(beam_angle);
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // DEBUG
+        // ///////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Draw the field of view and other references
+        void populateMarkerReference(string frame_name, ros::Publisher publisher) {
+            visualization_msgs::Marker references;
+
+            references.header.frame_id    = frame_name;  //"map";  //"laser";
+            references.header.stamp       = ros::Time::now();
+            references.ns                 = "example";
+            references.id                 = 1;
+            references.type               = visualization_msgs::Marker::LINE_STRIP;
+            references.action             = visualization_msgs::Marker::ADD;
+            references.pose.orientation.w = 1;
+
+            references.scale.x = 0.02;
+
+            references.color.r = 1.0f;
+            references.color.g = 1.0f;
+            references.color.b = 1.0f;
+            references.color.a = 1.0;
+            geometry_msgs::Point v;
+
+            v.x = 0.02 * cos(-2.356194);
+            v.y = 0.02 * sin(-2.356194);
             v.z = 0.0;
             references.points.push_back(v);
+
+            v.x = 5.6 * cos(-2.356194);
+            v.y = 5.6 * sin(-2.356194);
+            v.z = 0.0;
+            references.points.push_back(v);
+
+            float beam_angle = -2.356194 + 0.006136;
+            // first and last beam are already included
+            for (int i = 0; i < 723; i++, beam_angle += 0.006136) {
+                v.x = 5.6 * cos(beam_angle);
+                v.y = 5.6 * sin(beam_angle);
+                v.z = 0.0;
+                references.points.push_back(v);
+            }
+
+            v.x = 5.6 * cos(2.092350);
+            v.y = 5.6 * sin(2.092350);
+            v.z = 0.0;
+            references.points.push_back(v);
+
+            v.x = 0.02 * cos(2.092350);
+            v.y = 0.02 * sin(2.092350);
+            v.z = 0.0;
+            references.points.push_back(v);
+
+            // pub_goal_marker.publish(references);
+            publisher.publish(references);
         }
 
-        v.x = 5.6 * cos(2.092350);
-        v.y = 5.6 * sin(2.092350);
-        v.z = 0.0;
-        references.points.push_back(v);
+        void populateMarkerTopic(string frame_name, ros::Publisher publisher) {
+            visualization_msgs::Marker marker;
 
-        v.x = 0.02 * cos(2.092350);
-        v.y = 0.02 * sin(2.092350);
-        v.z = 0.0;
-        references.points.push_back(v);
+            marker.header.frame_id = frame_name;  //"map";  //"laser";
+            marker.header.stamp    = ros::Time::now();
+            marker.ns              = "example";
+            marker.id              = 0;
+            marker.type            = visualization_msgs::Marker::POINTS;
+            marker.action          = visualization_msgs::Marker::ADD;
 
-        // pub_goal_marker.publish(references);
-        publisher.publish(references);
-    }
+            marker.pose.orientation.w = 1;
 
-    void populateMarkerTopic(string frame_name, ros::Publisher publisher) {
-        visualization_msgs::Marker marker;
+            marker.scale.x = 0.05;
+            marker.scale.y = 0.05;
 
-        marker.header.frame_id = frame_name;  //"map";  //"laser";
-        marker.header.stamp    = ros::Time::now();
-        marker.ns              = "example";
-        marker.id              = 0;
-        marker.type            = visualization_msgs::Marker::POINTS;
-        marker.action          = visualization_msgs::Marker::ADD;
+            marker.color.a = 1.0;
 
-        marker.pose.orientation.w = 1;
+            // ROS_INFO("%i points to display", nb_pts);
+            for (int loop = 0; loop < nb_pts; loop++) {
+                geometry_msgs::Point p;
+                std_msgs::ColorRGBA c;
 
-        marker.scale.x = 0.05;
-        marker.scale.y = 0.05;
+                p.x = display[loop].x;
+                p.y = display[loop].y;
+                p.z = display[loop].z;
 
-        marker.color.a = 1.0;
+                c.r = colors[loop].r;
+                c.g = colors[loop].g;
+                c.b = colors[loop].b;
+                c.a = colors[loop].a;
 
-        // ROS_INFO("%i points to display", nb_pts);
-        for (int loop = 0; loop < nb_pts; loop++) {
-            geometry_msgs::Point p;
-            std_msgs::ColorRGBA c;
+                // ROS_INFO("(%f, %f, %f) with rgba (%f, %f, %f, %f)", p.x, p.y,
+                // p.z, c.r, c.g, c.b, c.a);
+                marker.points.push_back(p);
+                marker.colors.push_back(c);
+            }
 
-            p.x = display[loop].x;
-            p.y = display[loop].y;
-            p.z = display[loop].z;
-
-            c.r = colors[loop].r;
-            c.g = colors[loop].g;
-            c.b = colors[loop].b;
-            c.a = colors[loop].a;
-
-            // ROS_INFO("(%f, %f, %f) with rgba (%f, %f, %f, %f)", p.x, p.y,
-            // p.z, c.r, c.g, c.b, c.a);
-            marker.points.push_back(p);
-            marker.colors.push_back(c);
+            // pub_goal_marker.publish(marker);
+            publisher.publish(marker);
+            populateMarkerReference(frame_name, publisher);
         }
+    };
 
-        // pub_goal_marker.publish(marker);
-        publisher.publish(marker);
-        populateMarkerReference(frame_name, publisher);
+    int main(int argc, char** argv) {
+        ROS_INFO("(decision_node)");
+        ros::init(argc, argv, "decision");
+
+        decision_node bsObject;
+
+        ros::spin();
+
+        return 0;
     }
-};
-
-int main(int argc, char** argv) {
-    ROS_INFO("(decision_node)");
-    ros::init(argc, argv, "decision");
-
-    decision_node bsObject;
-
-    ros::spin();
-
-    return 0;
-}
