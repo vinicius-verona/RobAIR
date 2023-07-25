@@ -79,11 +79,6 @@ private:
     geometry_msgs::Point initial_position;
     float initial_orientation;
 
-    // Used to store the goal set in the map
-    bool target_set_position;
-    geometry_msgs::Point target_position;
-    float target_orientation;
-
     // to store the predicted and estimated position of the mobile robot
     bool localization_initialized;
     geometry_msgs::Point predicted_position;
