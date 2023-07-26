@@ -48,10 +48,6 @@ using namespace std;
 #define DISPLAY_DEBUG 1
 #define STATIC_TESTING_BFS 0
 
-// Philip Plateau Test
-#define base_position_x 0
-#define base_position_y 0
-
 #define frequency_expected 25
 #define MAX_BASE_DIST 5.0
 #define min_angle 0.1      // 0.1 rad = 5 degrees
@@ -67,6 +63,21 @@ float clamp(float orientation) {
         orientation += 2 * M_PI;
 
     return orientation;
+}
+
+// Transofrm the position of the base in the map frame to the robot frame
+// Input: point: position of the point in the map frame
+//        current_position: position of the robot in the map frame
+//        orientation: orientation of the robot in the map frame
+// Output: new_base_point: position of the base in the local frame of the robot
+geometry_msgs::Point transformPoint(geometry_msgs::Point& point, geometry_msgs::Point& current_pos, float orientation) {
+    geometry_msgs::Point new_point;
+    float x = point.x - current_pos.x;
+    float y = point.y - current_pos.y;
+
+    new_point.x = x * cos(orientation) + y * sin(orientation);
+    new_point.y = -x * sin(orientation) + y * cos(orientation);
+    return new_point;
 }
 
 class decision_node : ros::NodeHandle {
@@ -604,7 +615,7 @@ public:
         // keep publishing that point, after it reached a threashold distance, remove that point
         // from the path and publish the next one
 
-        if (path_points.size() == 0) {
+        if (path_left.size() == 0) {
             ROS_WARN("Path is empty, cannot move in path.");
             return;
         }
@@ -614,13 +625,13 @@ public:
             return;
         }
 
-        geometry_msgs::Point goal = path_points.front();
+        geometry_msgs::Point goal = path_left.front();
 
         if (state_has_changed && previous_state != bypass_obstacle) {
             // Send the goal to reach
             geometry_msgs::Point msg_goal_to_reach;
-            msg_goal_to_reach = path_points.front();
-            path_points.pop_front();
+            msg_goal_to_reach = path_left.front();
+            path_left.pop_front();
             msg_goal_to_reach.z = (float)current_state;
 
             if (msg_goal_to_reach.x == 0.0 && msg_goal_to_reach.y == 0.0) {
@@ -632,17 +643,26 @@ public:
         } else {
             // Check if the robot has reached the goal
             float distance_to_goal = distancePoints(localization, goal);
-            if (distance_to_goal <= 0.5) {
-                ROS_INFO("Reached goal, removing it from the path.");
+            if (distance_to_goal > 0.5) {
                 geometry_msgs::Point msg_goal_to_reach;
-                msg_goal_to_reach = path_points.front();
-                path_points.pop_front();
+                msg_goal_to_reach = path_left.front();
+                path_left.pop_front();
 
                 if (msg_goal_to_reach.x == 0.0 && msg_goal_to_reach.y == 0.0) {
                     ROS_ERROR("Position is (0,0), cannot move to it. [Decision node - process_moving_in_path]");
                     return;
                 }
                 pub_goal_to_reach.publish(msg_goal_to_reach);
+            } else {
+                ROS_INFO("Reached goal, removing it from the path and rotating towards the goal.");
+                float rotation_to_face_point = acos(goal.x / distance_to_goal);
+                if (goal.y < 0)
+                    rotation_to_face_point *= -1;
+
+                std_msgs::Float32 rot_msg = std_msgs::Float32();
+                rot_msg.data              = rotation_to_face_point;
+                pub_rotation_to_do.publish(rot_msg);
+                path_left.pop_front();
             }
         }
     }
@@ -682,39 +702,18 @@ public:
 
         // Copy path_points to path_left
         list<geometry_msgs::Point>::iterator it;
+        list<geometry_msgs::Point> path;
         for (it = path_points.begin(); it != path_points.end(); ++it) {
-            path_left.push_back(*it);
+            path_left.push_back(transformPoint(*it, localization, current_orientation));
+            path.push_back(transformPoint(*it, localization, current_orientation));
         }
 
         // Add the goal to the path
-        path_points.push_back(target);
-        path_left.push_back(target);
+        path_points = path;
+        path_points.push_back(transformPoint(target, localization, current_orientation));
+        path_left.push_back(transformPoint(target, localization, current_orientation));
 
-        // current_state = moving_in_path;
-
-        // Display in RVIZ the path to follow in purple and the last point in path in orange
-        // #ifdef DISPLAY_DEBUG
-        //         // path in rviz is purple
-        //         nb_pts           = 1;
-        //         colors[nb_pts].r = 0.5;
-        //         colors[nb_pts].g = 0;
-        //         colors[nb_pts].b = 0.5;
-        //         colors[nb_pts].a = 1.0;
-        //         for (it = path_points.begin(); it != path_points.end(); ++it) {
-        //             display[nb_pts] = *it;
-        //             nb_pts++;
-        //         }
-        //         populateMarkerTopic("map", pub_path_marker);
-
-        //         // last point in path in rviz is orange
-        //         colors[nb_pts].r = 1;
-        //         colors[nb_pts].g = 0.5;
-        //         colors[nb_pts].b = 0;
-        //         colors[nb_pts].a = 1.0;
-        //         display[nb_pts]  = target;
-        //         nb_pts++;
-        //         populateMarkerTopic("map", pub_path_marker);
-        // #endif
+        current_state = moving_in_path;
     }
 
     // CALLBACKS
