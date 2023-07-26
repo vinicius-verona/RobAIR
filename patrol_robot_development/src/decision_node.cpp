@@ -295,8 +295,8 @@ public:
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
     void update() {
         // init_localization = true;
-        // if (init_odom && init_obstacle && init_lateral_obstacles && init_localization) {
-        if (init_odom) {
+        if (init_odom && init_obstacle && init_lateral_obstacles && init_localization) {
+            // if (init_odom) {
             update_variables();
 
             // Based on the current localization, face aruco marker if close enough or go to the closest aruco marker
@@ -727,6 +727,95 @@ public:
         float distance_to_point1 = INT_MAX;
         float distance_to_point2 = INT_MAX;
 
+        // 1 for first quadrant, 2 for second quadrant, 3 for third quadrant, 4 for fourth quadrant
+        int found_quadrant1 = 0;
+        int found_quadrant2 = 0;
+
+        ROS_INFO("get_surrounding_points - point: (%f, %f)", point.x, point.y);
+
+        for (int i = 0; i < number_of_end_points; i++) {
+            // float distance_to_point = distancePoints(point, end_points_positions[i]);
+            float end_point_x = end_points_positions[i].x;
+            float end_point_y = end_points_positions[i].y;
+
+            // Based on the value of the point, we can know in which quadrant it is
+            // if it is in the opposite quadrant to the one found in the sotred variable (found_quandrant)
+            // we save the point in the array. surrounding_points has two elements in opposite quadrants.
+            // In this case, first quadrando is opposite to 3rd quadrant and 2nd quadrant is opposite to 4th quadrant
+            float dx = end_point_x - point.x;
+            float dy = end_point_y - point.y;
+
+            float distance = distancePoints(point, end_points_positions[i]);
+            if (dx >= 0 and dy >= 0) {  // first quadrant (top left)
+                if (distance < distance_to_point1) {
+                    if (found_quadrant2 == 3 || found_quadrant2 == 0) {
+                        distance_to_point1    = distance;
+                        surrounding_points[0] = i;
+                        found_quadrant1       = 1;
+                    }
+                } else if (distance < distance_to_point2) {
+                    if (found_quadrant1 == 3 || found_quadrant1 == 0) {
+                        distance_to_point2    = distance;
+                        surrounding_points[1] = i;
+                        found_quadrant2       = 1;
+                    }
+                }
+            } else if (dx >= 0 && dy < 0) {  // second quadrant (top right)
+                if (distance < distance_to_point1) {
+                    if (found_quadrant2 == 4 || found_quadrant2 == 0) {
+                        distance_to_point1    = distance;
+                        surrounding_points[0] = i;
+                        found_quadrant1       = 2;
+                    }
+                } else if (distance < distance_to_point2) {
+                    if (found_quadrant1 == 4 || found_quadrant1 == 0) {
+                        distance_to_point2    = distance;
+                        surrounding_points[1] = i;
+                        found_quadrant2       = 2;
+                    }
+                }
+            } else if (dx < 0 && dy < 0) {  // third quadrant (bottom right)
+                if (distance < distance_to_point1) {
+                    if (found_quadrant2 == 1 || found_quadrant2 == 0) {
+                        distance_to_point1    = distance;
+                        surrounding_points[0] = i;
+                        found_quadrant1       = 3;
+                    }
+                } else if (distance < distance_to_point2) {
+                    if (found_quadrant1 == 1 || found_quadrant1 == 0) {
+                        distance_to_point2    = distance;
+                        surrounding_points[1] = i;
+                        found_quadrant2       = 3;
+                    }
+                }
+            } else if (dx < 0 && dy >= 0) {  // fourth quadrant (bottom left)
+                if (distance < distance_to_point1) {
+                    if (found_quadrant2 == 2 || found_quadrant2 == 0) {
+                        distance_to_point1    = distance;
+                        surrounding_points[0] = i;
+                        found_quadrant1       = 4;
+                    }
+                } else if (distance < distance_to_point2) {
+                    if (found_quadrant1 == 2 || found_quadrant1 == 0) {
+                        distance_to_point2    = distance;
+                        surrounding_points[1] = i;
+                        found_quadrant2       = 4;
+                    }
+                }
+            }
+        }
+
+        ROS_INFO("get_surrounding_points - surrounding_points: (%d, %d)", surrounding_points[0], surrounding_points[1]);
+    }
+
+#ifdef BACKUP_IMPLEMENTATION
+    void get_surrounding_points_backup(geometry_msgs::Point point, int* surrounding_points) {
+        // for each point in end_points_positions, calculate the distance to the point passed as parameter and
+        // store the two closest points in an array and return itpath_left
+        // geometry_msgs::Point surrounding_points[2];
+        float distance_to_point1 = INT_MAX;
+        float distance_to_point2 = INT_MAX;
+
         ROS_INFO("get_surrounding_points - point: (%f, %f)", point.x, point.y);
 
         for (int i = 0; i < number_of_end_points; i++) {
@@ -775,6 +864,7 @@ public:
             }
         }
     }
+#endif
 
     void getPath(int initial_vertex, int* robot_surrounding_points_id, list<geometry_msgs::Point>* path) {
         ROS_INFO("getPath - initial_vertex: %d", initial_vertex);
@@ -919,17 +1009,33 @@ public:
         return sqrt(pow((pa.x - pb.x), 2.0) + pow((pa.y - pb.y), 2.0));
     }
 
+    string extractPathUntilCatkinWs(const std::string& pathList) {
+        // std::vector<std::string> paths;
+        size_t startPos = 0;
+        size_t endPos   = pathList.find(':');
+
+        string substring = "catkin_ws";
+        size_t catkinPos = pathList.find(substring);
+        if (catkinPos != string::npos) {
+            return pathList.substr(0, catkinPos + 9);  // +9 to include "catkin_ws"
+        }
+
+        // Return an empty string if "catkin_ws" is not found
+        return "";
+    }
+
     void load_graph_from_file(string file) {
         // Open the file
         ifstream FILE;
-        char* homeDir = getenv("HOME");
-        if (homeDir == nullptr) {
-            cout << "Unable to get the HOME environment variable." << endl;
+        string catkinDir = extractPathUntilCatkinWs(getenv("CMAKE_PREFIX_PATH"));
+
+        if (catkinDir.empty()) {
+            cout << "Unable to get the CMAKE_PREFIX_PATH environment variable." << endl;
             return;
         }
 
         // Construct the file path with the home directory
-        string f = string(homeDir) + "/catkin_ws/Graph/" + file;
+        string f = catkinDir + "/Graph/" + file;
         FILE.open(f.c_str(), ios::in);
         string line;
         bool edges_section = false;
