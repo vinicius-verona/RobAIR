@@ -616,7 +616,19 @@ public:
         // from the path and publish the next one
 
         if (path_left.size() == 0) {
-            ROS_WARN("Path is empty, cannot move in path.");
+            ROS_WARN("Path is empty, cannot move in path. Facing target.");
+            geometry_msgs::Point goal = transformPoint(target);
+            float distance_to_goal    = distancePoints(localization, goal);
+            if (distance_to_goal >= 0.01) {
+                float rotation_to_face_point = acos(goal.x / distance_to_goal);
+
+                if (goal.y < 0)
+                    rotation_to_face_point *= -1;
+
+                std_msgs::Float32 rot_msg = std_msgs::Float32();
+                rot_msg.data              = rotation_to_face_point;
+                pub_rotation_to_do.publish(rot_msg);
+            }
             return;
         }
 
@@ -655,13 +667,6 @@ public:
                 pub_goal_to_reach.publish(msg_goal_to_reach);
             } else {
                 ROS_INFO("Reached goal, removing it from the path and rotating towards the goal.");
-                float rotation_to_face_point = acos(goal.x / distance_to_goal);
-                if (goal.y < 0)
-                    rotation_to_face_point *= -1;
-
-                std_msgs::Float32 rot_msg = std_msgs::Float32();
-                rot_msg.data              = rotation_to_face_point;
-                pub_rotation_to_do.publish(rot_msg);
                 path_left.pop_front();
             }
         }
