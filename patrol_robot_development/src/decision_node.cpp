@@ -161,10 +161,13 @@ private:
     int target_surrounding_points_id[2];
     list<geometry_msgs::Point> path_points;
     list<geometry_msgs::Point> path_left;
+    list<geometry_msgs::Point> path_left_map_frame;
     int connection[1000][1000];          // Act as edges in the graph
     int vertex_connection_degree[1000];  // If a vertex has connection with 3 other vertices then its degree is 3 and we
                                          // use connection [0],[1],[2]
     bool visited_points[1000];           // Used to distinguish the points that have been visited in the graph
+    geometry_msgs::Point middle_end_node;
+    geometry_msgs::Point middle_end_node_map_frame;
     // geometry_msgs::Point robot_surrounding_points[2];
     // geometry_msgs::Point target_surrounding_points[2];
 
@@ -614,21 +617,19 @@ public:
         // Publish one point of the path to follow, until it gets there checking localization,
         // keep publishing that point, after it reached a threashold distance, remove that point
         // from the path and publish the next one
+        // TODO: Criar um processo para rotacionar para proximo nó
 
         if (path_left.size() == 0) {
-            ROS_WARN("Path is empty, cannot move in path. Facing target.");
-            geometry_msgs::Point goal = transformPoint(target);
-            float distance_to_goal    = distancePoints(localization, goal);
-            if (distance_to_goal >= 0.01) {
-                float rotation_to_face_point = acos(goal.x / distance_to_goal);
+            ROS_WARN("Path is empty, cannot move in path. Facing the goal.");
+            geometry_msgs::Point goal    = transformPoint(target, localization, current_orientation);
+            float distance_to_goal       = distancePoints(localization, goal);
+            float rotation_to_face_point = acos(goal.x / distance_to_goal);
+            if (goal.y < 0)
+                rotation_to_face_point *= -1;
 
-                if (goal.y < 0)
-                    rotation_to_face_point *= -1;
-
-                std_msgs::Float32 rot_msg = std_msgs::Float32();
-                rot_msg.data              = rotation_to_face_point;
-                pub_rotation_to_do.publish(rot_msg);
-            }
+            std_msgs::Float32 rot_msg = std_msgs::Float32();
+            rot_msg.data              = rotation_to_face_point;
+            pub_rotation_to_do.publish(rot_msg);
             return;
         }
 
@@ -637,7 +638,10 @@ public:
             return;
         }
 
-        geometry_msgs::Point goal = path_left.front();
+        geometry_msgs::Point goal           = path_left.front();
+        middle_end_node                     = goal;
+        geometry_msgs::Point goal_map_frame = path_left_map_frame.front();
+        middle_end_node_map_frame           = goal_map_frame;
 
         if (state_has_changed && previous_state != bypass_obstacle) {
             // Send the goal to reach
@@ -654,11 +658,17 @@ public:
 
         } else {
             // Check if the robot has reached the goal
-            float distance_to_goal = distancePoints(localization, goal);
+            float distance_to_goal        = distancePoints(localization, goal_map_frame);
+            float distance_to_middle_node = distancePoints(localization, middle_end_node_map_frame);
             if (distance_to_goal > 0.5) {
                 geometry_msgs::Point msg_goal_to_reach;
-                msg_goal_to_reach = path_left.front();
-                path_left.pop_front();
+
+                if (distance_to_goal > 0.01) {
+                    msg_goal_to_reach = transformPoint(middle_end_node_map_frame, localization, current_orientation);
+                } else {
+                    msg_goal_to_reach = path_left.front();
+                    path_left.pop_front();
+                }
 
                 if (msg_goal_to_reach.x == 0.0 && msg_goal_to_reach.y == 0.0) {
                     ROS_ERROR("Position is (0,0), cannot move to it. [Decision node - process_moving_in_path]");
@@ -667,6 +677,13 @@ public:
                 pub_goal_to_reach.publish(msg_goal_to_reach);
             } else {
                 ROS_INFO("Reached goal, removing it from the path and rotating towards the goal.");
+                // float rotation_to_face_point = acos(goal.x / distance_to_goal);
+                // if (goal.y < 0)
+                //     rotation_to_face_point *= -1;
+
+                // std_msgs::Float32 rot_msg = std_msgs::Float32();
+                // rot_msg.data              = rotation_to_face_point;
+                // pub_rotation_to_do.publish(rot_msg);
                 path_left.pop_front();
             }
         }
@@ -680,9 +697,10 @@ public:
         // localization.y = 0.5127485;
         // #endif
 
-        int robot_surrounding_points[2];
-        int target_surrounding_points[2];
+        int robot_surrounding_points[2]  = {-1, -1};
+        int target_surrounding_points[2] = {-1, -1};
         ROS_WARN("Target location: (%f, %f)", target.x, target.y);
+
         get_surrounding_points(localization, robot_surrounding_points);
         get_surrounding_points(target, target_surrounding_points);
 
@@ -690,8 +708,19 @@ public:
 
         list<geometry_msgs::Point> path_pointsA;
         list<geometry_msgs::Point> path_pointsB;
-        getPath(target_surrounding_points[0], robot_surrounding_points, &path_pointsA);
-        getPath(target_surrounding_points[1], robot_surrounding_points, &path_pointsB);
+        // if (target_surrounding_points[0] != -1)
+        //     getPath(target_surrounding_points[0], robot_surrounding_points, &path_pointsA);
+        // if (target_surrounding_points[1] != -1)
+        //     getPath(target_surrounding_points[1], robot_surrounding_points, &path_pointsB);
+
+        path_points.push_back(end_points_positions[1]);
+        path_points.push_back(end_points_positions[2]);
+        path_points.push_back(end_points_positions[3]);
+
+        if (target_surrounding_points[0] != -1 && target_surrounding_points[1] != -1) {
+            ROS_ERROR("Could not find a path to the target.");
+            return;
+        }
 
         // copy surrounding points
         robot_surrounding_points_id[0]  = robot_surrounding_points[0];
@@ -699,11 +728,11 @@ public:
         target_surrounding_points_id[0] = target_surrounding_points[0];
         target_surrounding_points_id[1] = target_surrounding_points[1];
 
-        if (path_pointsA.size() < path_pointsB.size()) {
-            path_points = path_pointsA;
-        } else {
-            path_points = path_pointsB;
-        }
+        // if (path_pointsA.size() < path_pointsB.size() || target_surrounding_points[1] == -1) {
+        //     path_points = path_pointsA;
+        // } else {
+        //     path_points = path_pointsB;
+        // }
 
         // Copy path_points to path_left
         list<geometry_msgs::Point>::iterator it;
@@ -711,12 +740,14 @@ public:
         for (it = path_points.begin(); it != path_points.end(); ++it) {
             path_left.push_back(transformPoint(*it, localization, current_orientation));
             path.push_back(transformPoint(*it, localization, current_orientation));
+            path_left_map_frame.push_back(*it);
         }
 
         // Add the goal to the path
         path_points = path;
         path_points.push_back(transformPoint(target, localization, current_orientation));
         path_left.push_back(transformPoint(target, localization, current_orientation));
+        path_left_map_frame.push_back(target);
 
         current_state = moving_in_path;
     }
