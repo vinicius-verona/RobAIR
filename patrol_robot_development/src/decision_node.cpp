@@ -618,6 +618,7 @@ public:
         // keep publishing that point, after it reached a threashold distance, remove that point
         // from the path and publish the next one
         // TODO: Criar um processo para rotacionar para proximo nó
+        // TODO: Instead of using transformPoint, use tf2 to transform the point to the robot frame
 
         if (path_left.size() == 0) {
             ROS_WARN("Path is empty, cannot move in path. Facing the goal.");
