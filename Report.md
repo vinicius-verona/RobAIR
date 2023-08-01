@@ -8,7 +8,7 @@
 
 ## Main Architecture
 
-![Main architecture](./Architecture/ROS-Patrol.svg "Main Architecture")
+![Main architecture](/home/vinicius-fr/RobAIR-DEV/RobAIR/Architecture/ROS-Patrol.svg "Main Architecture")
 
 ## Nodes
 
