@@ -43,47 +43,42 @@ window_height=$((screen_height / 2))
 
 if dpkg -s wmctrl &> /dev/null && dpkg -s xdotool &> /dev/null; then
 
+    open_terminal "rosrun robair_detection_navigation robair_webcam_one_newer_opencv.py"
+    wid=$(get_last_window_id)
+    move_to_workspace $wid 1
+    set_window_position $wid $window_width 0 $window_width "$(($window_height * 2))" "Rosrun Webcam"
+
     # Open terminals in the second workspace
     open_terminal "rosrun patrol_robot_development obstacle_detection_node"
     wid=$(get_last_window_id)
-    move_to_workspace $wid 1
+    move_to_workspace $wid 2
     set_window_position $wid 0 0 $window_width "$(($window_height * 2))" "Obstacle Detection"
 
     open_terminal "rosrun patrol_robot_development robot_moving_node"
     wid=$(get_last_window_id)
-    move_to_workspace $wid 1
+    move_to_workspace $wid 2
     set_window_position $wid $window_width 0 $window_width "$(($window_height * 2))" "Robot Moving"
 
     # Open terminals in the third workspace - Patrol-Development
-    open_terminal "rosrun patrol_robot_development decision_patrol_robot_development_node _map_name:=$1"
+    open_terminal "rosrun patrol_robot_development generate_map_points_node _map_name:=$1"
     wid=$(get_last_window_id)
-    move_to_workspace $wid 2
-    set_window_position $wid 0 0 $window_width $window_height "Decision Node"
-
-    open_terminal "rosrun patrol_robot_development obstacle_avoidance_patrol_robot_development_node"
-    wid=$(get_last_window_id)
-    move_to_workspace $wid 2
-    set_window_position $wid $window_width 0 $window_width $window_height "Obstacle Avoidance Node"
-
-    open_terminal "rosrun patrol_robot_development lateral_distances_patrol_robot_development_node"
-    wid=$(get_last_window_id)
-    move_to_workspace $wid 2
-    set_window_position $wid 0  $window_height $window_width $window_height "Lateral Distances Welcome"
+    move_to_workspace $wid 3
+    set_window_position $wid 0 0 $window_width "$(($window_height * 2))" "Generate Map Points Node"
 
     open_terminal "rosrun patrol_robot_development localization_patrol_robot_development_node"
     wid=$(get_last_window_id)
-    move_to_workspace $wid 2
-    set_window_position $wid $window_width  $window_height $window_width $window_height "Localization Node"
+    move_to_workspace $wid 3
+    set_window_position $wid $window_width  0 $window_width "$(($window_height * 2))" "Localization Node"
 
     # Open terminals in the fourth workspace - Rotation and Action
     open_terminal "rosrun patrol_robot_development rotation_patrol_robot_development_node"
     wid=$(get_last_window_id)
-    move_to_workspace $wid 3
+    move_to_workspace $wid 4
     set_window_position $wid 0 0 $window_width "$(($window_height*2))" "Rotation Node"
 
     open_terminal "rosrun patrol_robot_development action_patrol_robot_development_node"
     wid=$(get_last_window_id)
-    move_to_workspace $wid 3
+    move_to_workspace $wid 4
     set_window_position $wid $window_width 0 $window_width "$(($window_height*2))" "Action Welcome"
 else
     sudo apt-get install wmctrl  -y
