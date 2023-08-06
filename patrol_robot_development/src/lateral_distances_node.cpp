@@ -76,19 +76,15 @@ public:
         frame_origin.y = 0;
 
         // Communication with laser scanner
-        sub_scan =
-            n.subscribe("scan", 1, &lateral_distances::scanCallback, this);
-        sub_scan2 =
-            n.subscribe("scan2", 1, &lateral_distances::scanCallback2, this);
+        sub_scan  = n.subscribe("scan", 1, &lateral_distances::scanCallback, this);
+        sub_scan2 = n.subscribe("scan2", 1, &lateral_distances::scanCallback2, this);
 
         // Communication with translation_action
-        pub_closest_obstacles =
-            n.advertise<patrol_robot_development::LateralDistancesMsg>(
-                "lateral_distances", 1);
-        pub_closest_obstacles_marker = n.advertise<visualization_msgs::Marker>(
-            "lateral_distance_marker",
-            1);  // Preparing a topic to publish our results. This will be used
-                 // by the visualization tool rviz
+        pub_closest_obstacles = n.advertise<patrol_robot_development::LateralDistancesMsg>("lateral_distances", 1);
+        pub_closest_obstacles_marker =
+            n.advertise<visualization_msgs::Marker>("lateral_distance_marker",
+                                                    1);  // Preparing a topic to publish our results. This will be used
+                                                         // by the visualization tool rviz
         init_laser  = false;
         init_laser2 = false;
 
@@ -105,8 +101,8 @@ public:
             ros::spinOnce();  // each callback is called once to collect new
                               // data: laser + robot_moving
             update();         // processing of data
-            r.sleep();  // we wait if the processing (ie, callback+update) has
-                        // taken less than 0.1s (ie, 10 hz)
+            r.sleep();        // we wait if the processing (ie, callback+update) has
+                              // taken less than 0.1s (ie, 10 hz)
         }
     }
 
@@ -124,39 +120,32 @@ public:
 
             float beam_angle = angle_min;
             for (int loop2 = 0; loop2 < 2; loop2++)
-                for (int loop = 0; loop < nb_beams;
-                     loop++, beam_angle += angle_inc) {
+                for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
                     // Looking for the lateral of the robot
                     // we assume the robot has a radius of 75cm
                     if (fabs(current_scan[loop][loop2].x) > x_axis_limit)
                         continue;
 
                     // Check the closest obstacle in the left (+90 degs)
-                    if (clamp(beam_angle) >= left_angle_start &&
-                        (current_scan[loop][loop2].y > robair_size) &&
-                        (fabs(lt_closest_obstacle.y) >
-                         fabs(current_scan[loop][loop2].y))) {
+                    if (clamp(beam_angle) >= left_angle_start && (current_scan[loop][loop2].y > robair_size) &&
+                        (fabs(lt_closest_obstacle.y) > fabs(current_scan[loop][loop2].y))) {
                         lt_closest_obstacle  = current_scan[loop][loop2];
                         lt_obstacle_detected = true;
                     }
 
                     // Check the closest obstacle in the right (-90 degs)
-                    if (clamp(beam_angle) <= right_angle_start &&
-                        (current_scan[loop][loop2].y < -robair_size) &&
-                        (fabs(rt_closest_obstacle.y) >
-                         fabs(current_scan[loop][loop2].y))) {
+                    if (clamp(beam_angle) <= right_angle_start && (current_scan[loop][loop2].y < -robair_size) &&
+                        (fabs(rt_closest_obstacle.y) > fabs(current_scan[loop][loop2].y))) {
                         rt_closest_obstacle  = current_scan[loop][loop2];
                         rt_obstacle_detected = true;
                     }
                 }
 
             if (lt_obstacle_detected || rt_obstacle_detected) {
-                lateral_distances_msg.lt_obstacle_point = lt_closest_obstacle;
-                lateral_distances_msg.rt_obstacle_point = rt_closest_obstacle;
-                lateral_distances_msg.lt_obstacle_distance =
-                    distancePoints(frame_origin, lt_closest_obstacle);
-                lateral_distances_msg.rt_obstacle_distance =
-                    distancePoints(frame_origin, rt_closest_obstacle);
+                lateral_distances_msg.lt_obstacle_point    = lt_closest_obstacle;
+                lateral_distances_msg.rt_obstacle_point    = rt_closest_obstacle;
+                lateral_distances_msg.lt_obstacle_distance = distancePoints(frame_origin, lt_closest_obstacle);
+                lateral_distances_msg.rt_obstacle_distance = distancePoints(frame_origin, rt_closest_obstacle);
                 pub_closest_obstacles.publish(lateral_distances_msg);
 
                 // closest obstacle left is green (if found)
@@ -209,8 +198,7 @@ public:
         // hit
         float beam_angle = angle_min;
         for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
-            if ((scan->ranges[loop] < range_max) &&
-                (scan->ranges[loop] > range_min))
+            if ((scan->ranges[loop] < range_max) && (scan->ranges[loop] > range_min))
                 range[loop][0] = scan->ranges[loop];
             else
                 range[loop][0] = range_max;
@@ -244,15 +232,13 @@ public:
         // hit
         float beam_angle = angle_min;
         for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
-            if ((scan->ranges[loop] < range_max) &&
-                (scan->ranges[loop] > range_min))
+            if ((scan->ranges[loop] < range_max) && (scan->ranges[loop] > range_min))
                 range[loop][1] = scan->ranges[loop];
             else
                 range[loop][1] = range_max /*+ 0.2*/;
 
             // transform the scan in cartesian framewrok
-            current_scan[loop][1].x =
-                transform_laser.x + range[loop][1] * cos(beam_angle);
+            current_scan[loop][1].x = transform_laser.x + range[loop][1] * cos(beam_angle);
             current_scan[loop][1].y = range[loop][1] * sin(beam_angle);
             current_scan[loop][1].z = transform_laser.z;
         }

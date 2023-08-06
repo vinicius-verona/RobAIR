@@ -363,22 +363,6 @@ public:
                 }
             }
 
-            // if (d_goal <= 0) {
-            //     ROS_WARN("Distance is negative");
-            // }
-
-            // TODO: print distancePoints(c_location, target)
-
-            // // We are not close enough to the target, we compute the attractive
-            // // force
-            // float attractive_force_x =
-            //     target_radius * k_a * (c_location.x - target.x) / distancePoints(c_location, target);
-            // float attractive_force_y =
-            //     target_radius * k_a * (c_location.y - target.y) / distancePoints(c_location, target);
-
-            // total_force_x = attractive_force_x;
-            // total_force_y = attractive_force_y;
-
             if (isnan(total_force_x) || isnan(total_force_y)) {
                 ROS_ERROR("total force x or y is nan, values: (%f, %f) before loop. Values are: \n\tattractive_force_x "
                           "= %f \n\tattractive_force_y = %f \n\td_goal= %f, target_poisiton = (%f, %f)",
@@ -478,19 +462,7 @@ public:
                         ROS_BREAK();
                     }
                 }
-                // TODO: print distancePoints(c_location, closest_point_object)
-                // TODO: print pow(min_dist_to_object, 2)
-
-                // ROS_INFO("min_dist_to_object_1: %f | min_dist_to_object_2: %f \npow(min_dist,2): %f",
-                //          min_dist_to_object_1, min_dist_to_object_2, pow(min_dist_to_object, 2));
-                // ROS_INFO("repulsive_force: (%f, %f)", repulsive_force_x, repulsive_force_y);
             }
-
-            // if (isnan(total_force_x) || isnan(total_force_y) || isnan(next_goal.x) || isnan(next_goal.y)) {
-            //     ROS_ERROR("total_force_x or total_force_y is nan");
-            //     total_force_x = 0;
-            //     total_force_y = 0;
-            // }
 
             ROS_INFO("total_force: (%f, %f)\n times step = (%f, %f)", total_force_x, total_force_y,
                      total_force_x * step_x, total_force_y * step_y);
@@ -498,9 +470,6 @@ public:
             // Compute the goal to reach
             next_goal.x = c_location.x + (step_x * total_force_x);
             next_goal.y = c_location.y + (step_y * total_force_y);
-
-            // TODO: check if the x axis for the goal to reach is greater in absolute value than the closest obstacle
-            // in front, we have to rotate the robot
 
             // For the following blocks of code.. check if translation to next_goal é > 0
             // If it is not, rotation_to_do is 0
