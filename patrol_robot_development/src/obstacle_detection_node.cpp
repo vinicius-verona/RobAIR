@@ -1,31 +1,30 @@
 // Signal handling
 #include <signal.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_listener.h>
 
+#include <cmath>
+
+#include "geometry_msgs/Point.h"
+#include "message_filters/subscriber.h"
+#include "nav_msgs/Odometry.h"
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
-#include "visualization_msgs/Marker.h"
-#include "geometry_msgs/Point.h"
 #include "std_msgs/ColorRGBA.h"
 #include "std_msgs/Float32.h"
 #include "std_msgs/Int32.h"
-#include <cmath>
-#include "nav_msgs/Odometry.h"
-#include <tf/transform_datatypes.h>
-#include <tf/transform_listener.h>
 #include "std_srvs/Empty.h"
-
-#include "tf/transform_listener.h"
-#include "tf/transform_broadcaster.h"
-#include "message_filters/subscriber.h"
 #include "tf/message_filter.h"
+#include "tf/transform_broadcaster.h"
+#include "tf/transform_listener.h"
+#include "visualization_msgs/Marker.h"
 
-float robair_size = 0.25;//0.2 for small robair
+float robair_size = 0.25;  // 0.2 for small robair
 
 using namespace std;
 
 class obstacle_detection {
 private:
-
     ros::NodeHandle n;
 
     // communication with laser_scanner
@@ -54,235 +53,245 @@ private:
     std_msgs::ColorRGBA colors[2000];
 
 public:
+    obstacle_detection() {
+        // Communication with laser scanner
+        sub_scan =
+            n.subscribe("scan", 1, &obstacle_detection::scanCallback, this);
+        sub_scan2 =
+            n.subscribe("scan2", 1, &obstacle_detection::scanCallback2, this);
 
-obstacle_detection() {
+        // communication with translation_action
+        pub_closest_obstacle =
+            n.advertise<geometry_msgs::Point>("closest_obstacle", 1);
+        pub_closest_obstacle_marker = n.advertise<visualization_msgs::Marker>(
+            "closest_obstacle_marker",
+            1);  // Preparing a topic to publish our results. This will be used
+                 // by the visualization tool rviz
+        init_laser  = false;
+        init_laser2 = false;
 
-    // Communication with laser scanner
-    sub_scan = n.subscribe("scan", 1, &obstacle_detection::scanCallback, this);
-    sub_scan2 = n.subscribe("scan2", 1, &obstacle_detection::scanCallback2, this);
+        tf::StampedTransform transform;
+        tf::TransformListener listener;
 
-    // communication with translation_action
-    pub_closest_obstacle = n.advertise<geometry_msgs::Point>("closest_obstacle", 1);
-    pub_closest_obstacle_marker = n.advertise<visualization_msgs::Marker>("closest_obstacle_marker", 1); // Preparing a topic to publish our results. This will be used by the visualization tool rviz
-    init_laser = false;
-    init_laser2 = false;
+        transform_laser.x = -.35;
+        transform_laser.y = 0;
+        transform_laser.z = 1.2;
 
-    tf::StampedTransform transform;
-    tf::TransformListener listener;
+        /*  try {
+              listener.waitForTransform("/laser", "/laser2", ros::Time(0),
+          ros::Duration(10.0) ); listener.lookupTransform("/laser", "/laser2",
+          ros::Time(0), transform); transform_laser.x =
+          transform.getOrigin().x(); transform_laser.y =
+          transform.getOrigin().y(); transform_laser.z =
+          transform.getOrigin().z(); } catch (tf::TransformException ex) {
+              ROS_ERROR("%s",ex.what());
+          }*/
 
-    transform_laser.x = -.35;
-    transform_laser.y = 0;
-    transform_laser.z = 1.2;
-
-  /*  try {
-        listener.waitForTransform("/laser", "/laser2", ros::Time(0), ros::Duration(10.0) );
-        listener.lookupTransform("/laser", "/laser2", ros::Time(0), transform);
-        transform_laser.x = transform.getOrigin().x();
-        transform_laser.y = transform.getOrigin().y();
-        transform_laser.z = transform.getOrigin().z();
-    } catch (tf::TransformException ex) {
-        ROS_ERROR("%s",ex.what());
-    }*/
-
-    //INFINTE LOOP TO COLLECT LASER DATA AND PROCESS THEM
-    ros::Rate r(10);// this node will run at 10hz
-    while (ros::ok()) {
-        ros::spinOnce();//each callback is called once to collect new data: laser + robot_moving
-        update();//processing of data
-        r.sleep();//we wait if the processing (ie, callback+update) has taken less than 0.1s (ie, 10 hz)
+        // INFINTE LOOP TO COLLECT LASER DATA AND PROCESS THEM
+        ros::Rate r(10);      // this node will run at 10hz
+        while (ros::ok()) {
+            ros::spinOnce();  // each callback is called once to collect new
+                              // data: laser + robot_moving
+            update();         // processing of data
+            r.sleep();  // we wait if the processing (ie, callback+update) has
+                        // taken less than 0.1s (ie, 10 hz)
+        }
     }
 
-}
+    // UPDATE: main processing
+    /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
+    void update() {
+        // ROS_INFO("init_laser: %i, init_laser2: %i", init_laser, init_laser2);
+        if (init_laser && init_laser2) {
+            closest_obstacle.x     = range_max;
+            closest_obstacle.y     = range_max;
+            bool obstacle_detected = false;
+            // ROS_INFO("closest obstacle: (%f; %f)", closest_obstacle.x,
+            // closest_obstacle.y);
 
-//UPDATE: main processing
-/*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
-void update() {
-
-    //ROS_INFO("init_laser: %i, init_laser2: %i", init_laser, init_laser2);
-if ( init_laser && init_laser2 ) {
-        closest_obstacle.x = range_max;
-        closest_obstacle.y = range_max;
-        bool obstacle_detected = false;
-        //ROS_INFO("closest obstacle: (%f; %f)", closest_obstacle.x, closest_obstacle.y);
-
-        float beam_angle = angle_min;
-        for ( int loop2=0; loop2<2; loop2++)
-            for ( int loop=0; loop < nb_beams; loop++, beam_angle += angle_inc ) {
-                //ROS_INFO("hit[%i]: (%f, %f) -> (%f, %f)", loop, range[loop], beam_angle*180/M_PI, current_scan[loop].x, current_scan[loop].y);
-                if ( ( fabs(current_scan[loop][loop2].y) < robair_size ) && ( fabs(closest_obstacle.x) > fabs(current_scan[loop][loop2].x) ) && ( current_scan[loop][loop2].x >= 0 ) ) {
-                    closest_obstacle = current_scan[loop][loop2];
-                    obstacle_detected = true;
-                    //ROS_INFO("closest obstacle: (%f; %f)", closest_obstacle.x, closest_obstacle.y);
-                    //getchar();
+            float beam_angle = angle_min;
+            for (int loop2 = 0; loop2 < 2; loop2++)
+                for (int loop = 0; loop < nb_beams;
+                     loop++, beam_angle += angle_inc) {
+                    // ROS_INFO("hit[%i]: (%f, %f) -> (%f, %f)", loop,
+                    // range[loop], beam_angle*180/M_PI, current_scan[loop].x,
+                    // current_scan[loop].y);
+                    if ((fabs(current_scan[loop][loop2].y) < robair_size) &&
+                        (fabs(closest_obstacle.x) >
+                         fabs(current_scan[loop][loop2].x)) &&
+                        (current_scan[loop][loop2].x >= 0)) {
+                        closest_obstacle  = current_scan[loop][loop2];
+                        obstacle_detected = true;
+                        // ROS_INFO("closest obstacle: (%f; %f)",
+                        // closest_obstacle.x, closest_obstacle.y); getchar();
+                    }
                 }
+
+            if ( ( obstacle_detected ) /*&& ( distancePoints(closest_obstacle, previous_closest_obstacle) > 0.05 )*/ ) {
+                pub_closest_obstacle.publish(closest_obstacle);
+
+                nb_pts = 0;
+                // closest obstacle is red
+                display[nb_pts] = closest_obstacle;
+
+                colors[nb_pts].r = 1;
+                colors[nb_pts].g = 0;
+                colors[nb_pts].b = 0;
+                colors[nb_pts].a = 1.0;
+                nb_pts++;
+                populateMarkerTopic();
             }
+            if (distancePoints(closest_obstacle, previous_closest_obstacle) >
+                0.05) {
+                ROS_INFO("closest obstacle: (%f; %f)", closest_obstacle.x,
+                         closest_obstacle.y);
 
-        if ( ( obstacle_detected ) /*&& ( distancePoints(closest_obstacle, previous_closest_obstacle) > 0.05 )*/ ) {
-            pub_closest_obstacle.publish(closest_obstacle);
-
-            nb_pts=0;
-            // closest obstacle is red
-            display[nb_pts] = closest_obstacle;
-
-            colors[nb_pts].r = 1;
-            colors[nb_pts].g = 0;
-            colors[nb_pts].b = 0;
-            colors[nb_pts].a = 1.0;
-            nb_pts++;
-            populateMarkerTopic();
-        }
-        if ( distancePoints(closest_obstacle, previous_closest_obstacle) > 0.05 ) {
-            ROS_INFO("closest obstacle: (%f; %f)", closest_obstacle.x, closest_obstacle.y);
-
-            previous_closest_obstacle.x = closest_obstacle.x;
-            previous_closest_obstacle.y = closest_obstacle.y;
+                previous_closest_obstacle.x = closest_obstacle.x;
+                previous_closest_obstacle.y = closest_obstacle.y;
+            }
         }
     }
 
-}
-
-// Distance between two points
-float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {
-
-    return sqrt(pow((pa.x-pb.x),2.0) + pow((pa.y-pb.y),2.0));
-
-}
-
-//CALLBACK
-/*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
-void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
-
-    init_laser = true;
-
-    // store the important data related to laserscanner
-    range_min = scan->range_min;
-    range_max = scan->range_max;
-    angle_min = scan->angle_min;
-    angle_max = scan->angle_max;
-    angle_inc = scan->angle_increment;
-    nb_beams = ((-1 * angle_min) + angle_max)/angle_inc;
-
-    // store the range and the coordinates in cartesian framework of each hit
-    float beam_angle = angle_min;
-    for ( int loop=0 ; loop < nb_beams; loop++, beam_angle += angle_inc ) {
-        if ( ( scan->ranges[loop] < range_max ) && ( scan->ranges[loop] > range_min ) )
-            range[loop][0] = scan->ranges[loop];
-        else
-            range[loop][0] = range_max;
-
-        //transform the scan in cartesian framewrok
-        current_scan[loop][0].x = range[loop][0] * cos(beam_angle);
-        current_scan[loop][0].y = range[loop][0] * sin(beam_angle);
-        current_scan[loop][0].z = 0.0;
-        //ROS_INFO("laser[%i]: (%f, %f) -> (%f, %f)", loop, range[loop], beam_angle*180/M_PI, current_scan[loop].x, current_scan[loop].y);
-
+    // Distance between two points
+    float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {
+        return sqrt(pow((pa.x - pb.x), 2.0) + pow((pa.y - pb.y), 2.0));
     }
 
-}//scanCallback
+    // CALLBACK
+    /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
+    void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
+        init_laser = true;
 
-void scanCallback2(const sensor_msgs::LaserScan::ConstPtr& scan) {
+        // store the important data related to laserscanner
+        range_min = scan->range_min;
+        range_max = scan->range_max;
+        angle_min = scan->angle_min;
+        angle_max = scan->angle_max;
+        angle_inc = scan->angle_increment;
+        nb_beams  = ((-1 * angle_min) + angle_max) / angle_inc;
 
-    init_laser2 = true;
-    // store the important data related to laserscanner
-    range_min = scan->range_min;
-    range_max = scan->range_max;
-    angle_min = scan->angle_min;
-    angle_max = scan->angle_max;
-    angle_inc = scan->angle_increment;
-    nb_beams = ((-1 * angle_min) + angle_max)/angle_inc;
+        // store the range and the coordinates in cartesian framework of each
+        // hit
+        float beam_angle = angle_min;
+        for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
+            if ((scan->ranges[loop] < range_max) &&
+                (scan->ranges[loop] > range_min))
+                range[loop][0] = scan->ranges[loop];
+            else
+                range[loop][0] = range_max;
 
-    // store the range and the coordinates in cartesian framework of each hit
-    float beam_angle = angle_min;
-    for (int loop=0 ; loop < nb_beams; loop++, beam_angle += angle_inc) {
-        if ( ( scan->ranges[loop] < range_max ) && ( scan->ranges[loop] > range_min ) )
-            range[loop][1] = scan->ranges[loop];
-        else
-            range[loop][1] = range_max /*+ 0.2*/;
+            // transform the scan in cartesian framewrok
+            current_scan[loop][0].x = range[loop][0] * cos(beam_angle);
+            current_scan[loop][0].y = range[loop][0] * sin(beam_angle);
+            current_scan[loop][0].z = 0.0;
+            // ROS_INFO("laser[%i]: (%f, %f) -> (%f, %f)", loop, range[loop],
+            // beam_angle*180/M_PI, current_scan[loop].x, current_scan[loop].y);
+        }
 
-        //transform the scan in cartesian framewrok
-        current_scan[loop][1].x = transform_laser.x + range[loop][1] * cos(beam_angle);
-        current_scan[loop][1].y = range[loop][1] * sin(beam_angle);
-        current_scan[loop][1].z = transform_laser.z;
-    }
+    }  // scanCallback
 
-}//scanCallback2
+    void scanCallback2(const sensor_msgs::LaserScan::ConstPtr& scan) {
+        init_laser2 = true;
+        // store the important data related to laserscanner
+        range_min = scan->range_min;
+        range_max = scan->range_max;
+        angle_min = scan->angle_min;
+        angle_max = scan->angle_max;
+        angle_inc = scan->angle_increment;
+        nb_beams  = ((-1 * angle_min) + angle_max) / angle_inc;
 
-// Draw the field of view and other references
-void populateMarkerReference() {
+        // store the range and the coordinates in cartesian framework of each
+        // hit
+        float beam_angle = angle_min;
+        for (int loop = 0; loop < nb_beams; loop++, beam_angle += angle_inc) {
+            if ((scan->ranges[loop] < range_max) &&
+                (scan->ranges[loop] > range_min))
+                range[loop][1] = scan->ranges[loop];
+            else
+                range[loop][1] = range_max /*+ 0.2*/;
 
-    visualization_msgs::Marker references;
+            // transform the scan in cartesian framewrok
+            current_scan[loop][1].x =
+                transform_laser.x + range[loop][1] * cos(beam_angle);
+            current_scan[loop][1].y = range[loop][1] * sin(beam_angle);
+            current_scan[loop][1].z = transform_laser.z;
+        }
 
-    references.header.frame_id = "laser";
-    references.header.stamp = ros::Time::now();
-    references.ns = "example";
-    references.id = 1;
-    references.type = visualization_msgs::Marker::LINE_STRIP;
-    references.action = visualization_msgs::Marker::ADD;
-    references.pose.orientation.w = 1;
+    }  // scanCallback2
 
-    references.scale.x = 0.02;
+    // Draw the field of view and other references
+    void populateMarkerReference() {
+        visualization_msgs::Marker references;
 
-    references.color.r = 1.0f;
-    references.color.g = 1.0f;
-    references.color.b = 1.0f;
-    references.color.a = 1.0;
-    geometry_msgs::Point v;
+        references.header.frame_id    = "laser";
+        references.header.stamp       = ros::Time::now();
+        references.ns                 = "example";
+        references.id                 = 1;
+        references.type               = visualization_msgs::Marker::LINE_STRIP;
+        references.action             = visualization_msgs::Marker::ADD;
+        references.pose.orientation.w = 1;
 
-    v.x =  0.02 * cos(-2.356194);
-    v.y =  0.02 * sin(-2.356194);
-    v.z = 0.0;
-    references.points.push_back(v);
+        references.scale.x = 0.02;
 
-    v.x =  5.6 * cos(-2.356194);
-    v.y =  5.6 * sin(-2.356194);
-    v.z = 0.0;
-    references.points.push_back(v);
+        references.color.r = 1.0f;
+        references.color.g = 1.0f;
+        references.color.b = 1.0f;
+        references.color.a = 1.0;
+        geometry_msgs::Point v;
 
-    float beam_angle = -2.356194 + 0.006136;
-    // first and last beam are already included
-    for (int i=0 ; i< 723; i++, beam_angle += 0.006136){
-        v.x =  5.6 * cos(beam_angle);
-        v.y =  5.6 * sin(beam_angle);
+        v.x = 0.02 * cos(-2.356194);
+        v.y = 0.02 * sin(-2.356194);
         v.z = 0.0;
         references.points.push_back(v);
+
+        v.x = 5.6 * cos(-2.356194);
+        v.y = 5.6 * sin(-2.356194);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        float beam_angle = -2.356194 + 0.006136;
+        // first and last beam are already included
+        for (int i = 0; i < 723; i++, beam_angle += 0.006136) {
+            v.x = 5.6 * cos(beam_angle);
+            v.y = 5.6 * sin(beam_angle);
+            v.z = 0.0;
+            references.points.push_back(v);
+        }
+
+        v.x = 5.6 * cos(2.092350);
+        v.y = 5.6 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        v.x = 0.02 * cos(2.092350);
+        v.y = 0.02 * sin(2.092350);
+        v.z = 0.0;
+        references.points.push_back(v);
+
+        pub_closest_obstacle_marker.publish(references);
     }
 
-    v.x =  5.6 * cos(2.092350);
-    v.y =  5.6 * sin(2.092350);
-    v.z = 0.0;
-    references.points.push_back(v);
+    void populateMarkerTopic() {
+        visualization_msgs::Marker marker;
 
-    v.x =  0.02 * cos(2.092350);
-    v.y =  0.02 * sin(2.092350);
-    v.z = 0.0;
-    references.points.push_back(v);
+        marker.header.frame_id = "laser";
+        marker.header.stamp    = ros::Time::now();
+        marker.ns              = "example";
+        marker.id              = 0;
+        marker.type            = visualization_msgs::Marker::POINTS;
+        marker.action          = visualization_msgs::Marker::ADD;
 
-    pub_closest_obstacle_marker.publish(references);
+        marker.pose.orientation.w = 1;
 
-}
+        marker.scale.x = 0.05;
+        marker.scale.y = 0.05;
 
-void populateMarkerTopic(){
+        marker.color.a = 1.0;
 
-    visualization_msgs::Marker marker;
-
-    marker.header.frame_id = "laser";
-    marker.header.stamp = ros::Time::now();
-    marker.ns = "example";
-    marker.id = 0;
-    marker.type = visualization_msgs::Marker::POINTS;
-    marker.action = visualization_msgs::Marker::ADD;
-
-    marker.pose.orientation.w = 1;
-
-    marker.scale.x = 0.05;
-    marker.scale.y = 0.05;
-
-    marker.color.a = 1.0;
-
-    //ROS_INFO("%i points to display", nb_pts);
-    for (int loop = 0; loop < nb_pts; loop++) {
+        // ROS_INFO("%i points to display", nb_pts);
+        for (int loop = 0; loop < nb_pts; loop++) {
             geometry_msgs::Point p;
             std_msgs::ColorRGBA c;
 
@@ -295,22 +304,18 @@ void populateMarkerTopic(){
             c.b = colors[loop].b;
             c.a = colors[loop].a;
 
-            //ROS_INFO("(%f, %f, %f) with rgba (%f, %f, %f, %f)", p.x, p.y, p.z, c.r, c.g, c.b, c.a);
+            // ROS_INFO("(%f, %f, %f) with rgba (%f, %f, %f, %f)", p.x, p.y,
+            // p.z, c.r, c.g, c.b, c.a);
             marker.points.push_back(p);
             marker.colors.push_back(c);
         }
 
-    pub_closest_obstacle_marker.publish(marker);
-    populateMarkerReference();
-
-}
-
-
+        pub_closest_obstacle_marker.publish(marker);
+        populateMarkerReference();
+    }
 };
 
-
-int main(int argc, char **argv){
-
+int main(int argc, char** argv) {
     ros::init(argc, argv, "obstacle_detection");
     ros::NodeHandle n;
 
@@ -325,5 +330,3 @@ int main(int argc, char **argv){
 
     return 0;
 }
-
-

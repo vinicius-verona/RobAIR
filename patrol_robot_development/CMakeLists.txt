@@ -49,11 +49,13 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  ObstacleAvoidanceMsg.msg
+  ObstacleAvoidedMsg.msg
+  LateralDistancesMsg.msg
+  # Message2.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -70,10 +72,11 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  std_msgs  # Or other packages containing msgs
+  geometry_msgs
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -109,25 +112,33 @@ include_directories(
 
 ## Declare a cpp executable
 add_executable(decision_patrol_robot_development_node src/decision_node.cpp)
-add_executable(decision_patrol_robot_development_vinicius_node src/decision_node_vinicius.cpp)
-add_executable(datmo_patrol_robot_development_node src/datmo_node.cpp)
+add_executable(datmo_patrol_robot_development_node src/datmo_2laser_node.cpp)
 add_executable(robot_moving_patrol_robot_development_node src/robot_moving_node.cpp)
 add_executable(action_patrol_robot_development_node src/action_node.cpp)
 add_executable(obstacle_detection_patrol_robot_development_node src/obstacle_detection_node.cpp)
 add_executable(rotation_patrol_robot_development_node src/rotation_node.cpp)
+add_executable(localization_patrol_robot_development_node src/localization_node.cpp)
+add_executable(lateral_distances_patrol_robot_development_node src/lateral_distances_node.cpp)
+add_executable(obstacle_avoidance_patrol_robot_development_node src/obstacle_avoidance_node.cpp)
+add_executable(generate_map_points_node src/generate_map_end_points.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(datmo_node datmo_generate_messages_cpp)
+add_dependencies(lateral_distances_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(obstacle_avoidance_patrol_robot_development_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(decision_patrol_robot_development_node ${catkin_LIBRARIES})
-target_link_libraries(decision_patrol_robot_development_vinicius_node ${catkin_LIBRARIES})
 target_link_libraries(datmo_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(robot_moving_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(action_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(obstacle_detection_patrol_robot_development_node ${catkin_LIBRARIES})
 target_link_libraries(rotation_patrol_robot_development_node ${catkin_LIBRARIES})
+target_link_libraries(localization_patrol_robot_development_node ${catkin_LIBRARIES})
+target_link_libraries(lateral_distances_patrol_robot_development_node ${catkin_LIBRARIES})
+target_link_libraries(obstacle_avoidance_patrol_robot_development_node ${catkin_LIBRARIES})
+target_link_libraries(generate_map_points_node ${catkin_LIBRARIES})
 
 #############
 ## Install ##
